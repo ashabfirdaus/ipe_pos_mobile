@@ -1,6 +1,6 @@
 {
-    "name": "ipe_mobile_pos",
-    "short_name": "ipe_mobile_pos",
+    "name": "IPE - POS",
+    "short_name": "IPE - POS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

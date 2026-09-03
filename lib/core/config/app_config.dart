@@ -4,7 +4,7 @@ class AppConfig {
   AppConfig._();
 
   // App Metadata
-  static const String appName = 'IPE Mobile POS';
+  static const String appName = 'IPE - POS';
   static const String appVersion = '1.0.0';
   static const String buildNumber = '1';
 

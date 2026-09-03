@@ -6,6 +6,7 @@ class AppAssets {
   static const String _iconsPath = 'assets/icons';
 
   // Images
+  static const String appIcon = 'assets/icon/app_icon.png';
   static const String logo = '$_imagesPath/logo.png';
   static const String splashBackground = '$_imagesPath/splash_bg.png';
   static const String defaultAvatar = '$_imagesPath/default_avatar.png';

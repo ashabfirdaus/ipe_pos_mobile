@@ -16,9 +16,15 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primary,
         primary: AppColors.primary,
+        onPrimary: Colors.white,
+        primaryContainer: AppColors.primaryContainer,
+        onPrimaryContainer: AppColors.primaryDark,
         secondary: AppColors.secondary,
+        onSecondary: Colors.white,
         surface: AppColors.surface,
+        onSurface: AppColors.textPrimary,
         error: AppColors.error,
+        onError: Colors.white,
         brightness: Brightness.light,
       ),
       appBarTheme: const AppBarTheme(
@@ -36,6 +42,8 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: AppColors.primary.withValues(alpha: 0.35),
           padding: AppSizes.paddingButton,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -46,7 +54,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.primary,
-          side: const BorderSide(color: AppColors.primary),
+          side: const BorderSide(color: AppColors.primary, width: 1.5),
           padding: AppSizes.paddingButton,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
@@ -54,8 +62,15 @@ class AppTheme {
           textStyle: AppTextStyles.button.copyWith(color: AppColors.primary),
         ),
       ),
-      cardColor: AppColors.card,
-      shadowColor: Colors.black.withValues(alpha: 0.06),
+      cardTheme: CardThemeData(
+        color: AppColors.card,
+        elevation: 1.5,
+        shadowColor: AppColors.primaryDark.withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          side: const BorderSide(color: AppColors.divider, width: 1),
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
@@ -92,6 +107,7 @@ class AppTheme {
         primary: AppColors.primaryLight,
         secondary: AppColors.secondaryLight,
         surface: AppColors.darkSurface,
+        onSurface: AppColors.darkTextPrimary,
         error: AppColors.error,
         brightness: Brightness.dark,
       ),
@@ -106,8 +122,39 @@ class AppTheme {
           color: AppColors.darkTextPrimary,
         ),
       ),
-      cardColor: AppColors.darkCard,
-      shadowColor: Colors.black.withValues(alpha: 0.3),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryLight,
+          foregroundColor: Colors.white,
+          elevation: 2,
+          shadowColor: Colors.black.withValues(alpha: 0.5),
+          padding: AppSizes.paddingButton,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          ),
+          textStyle: AppTextStyles.button,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.primaryLight,
+          side: const BorderSide(color: AppColors.primaryLight, width: 1.5),
+          padding: AppSizes.paddingButton,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          ),
+          textStyle: AppTextStyles.button.copyWith(color: AppColors.primaryLight),
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: AppColors.darkCard,
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          side: const BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+      ),
     );
   }
 }

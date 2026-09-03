@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/config/api_config.dart';
 import '../../../core/config/app_config.dart';
+import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -103,15 +104,28 @@ class _LoginPageState extends State<LoginPage> {
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(AppSizes.md),
+          width: 80,
+          height: 80,
           decoration: BoxDecoration(
-            color: AppColors.primary.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
-          child: const Icon(
-            Icons.point_of_sale_rounded,
-            size: 56,
-            color: AppColors.primary,
+          clipBehavior: Clip.antiAlias,
+          child: Image.asset(
+            AppAssets.appIcon,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => const Icon(
+              Icons.point_of_sale_rounded,
+              size: 48,
+              color: AppColors.primary,
+            ),
           ),
         ),
         AppSizes.gapH16,

@@ -22,6 +22,6 @@ void main() {
 
     // 3. Verify LoginPage has loaded because no token is saved
     expect(find.text('Masuk Akun Kasir'), findsOneWidget);
-    expect(find.text('Username atau Email'), findsOneWidget);
+    expect(find.text('Username'), findsOneWidget);
   });
 }

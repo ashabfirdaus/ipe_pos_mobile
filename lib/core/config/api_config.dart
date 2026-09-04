@@ -1,38 +1,40 @@
 class ApiConfig {
   ApiConfig._();
 
-  // Base URLs according to environment
-  static const String devBaseUrl = 'https://dev-api.ipe-pos.example.com/api/v1';
-  static const String stagingBaseUrl = 'https://staging-api.ipe-pos.example.com/api/v1';
-  static const String prodBaseUrl = 'https://api.ipe-pos.example.com/api/v1';
+  // Default Dev Base URL requested by user
+  static const String defaultBaseUrl = 'http://192.168.1.6:8000/api';
 
-  // Active Base URL (change or switch dynamically based on environment)
-  static String baseUrl = devBaseUrl;
+  // Active Base URL (can be customized via settings or loaded from local storage)
+  static String baseUrl = defaultBaseUrl;
 
   // Connection Timeouts
-  static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 30);
-  static const Duration sendTimeout = Duration(seconds: 30);
+  static const Duration connectTimeout = Duration(seconds: 20);
 
-  // Authentication & User Endpoints
+  // 1. Authentication Endpoints
   static const String login = '/auth/login';
-  static const String register = '/auth/register';
+  static const String profile = '/auth/me';
+  static const String refreshToken = '/auth/refresh';
   static const String logout = '/auth/logout';
-  static const String refreshToken = '/auth/refresh-token';
-  static const String profile = '/user/profile';
-  static const String updateProfile = '/user/profile/update';
 
-  // POS Core Endpoints
-  static const String dashboard = '/pos/dashboard';
-  static const String products = '/pos/products';
-  static const String categories = '/pos/categories';
-  static const String transactions = '/pos/transactions';
-  static const String transactionDetail = '/pos/transactions/'; // append :id
-  static const String createOrder = '/pos/orders/create';
-  static const String cashDrawer = '/pos/cash-drawer';
-  static const String shift = '/pos/shift';
-  static const String reports = '/pos/reports';
-  static const String notifications = '/notifications';
+  // 2. Point of Sale (POS) Endpoints
+  static const String posInitialData = '/pos/initial-data';
+  static const String posBranches = '/pos/branches';
+  static const String posWarehouses = '/pos/warehouses';
+  static const String posProducts = '/pos/products';
+  static const String posScanQr = '/pos/scan-qr';
+  static const String posInvoices = '/pos/invoices';
+  static String posInvoiceDetail(dynamic id) => '/pos/invoices/$id';
+  static String posInvoiceVoid(dynamic id) => '/pos/invoices/$id/void';
+
+  // 3. Item Transactions Endpoints
+  static String itemTransactionSummary(dynamic itemId) => '/item/$itemId/transaction-summary';
+  static String itemTransactionDetails(dynamic itemId) => '/item/$itemId/transaction-details';
+  static String itemTransactionTotal(dynamic itemId) => '/item/$itemId/transaction-total';
+  static String itemTransactionRowsSummary(dynamic itemId) => '/item/$itemId/transaction-rows-summary';
+  static String itemTransactionTotalRows(dynamic itemId) => '/item/$itemId/transaction-total-rows';
+
+  // 4. Payment Notification Endpoint
+  static const String savePaymentNotification = '/save_payment_notification';
 
   // Standard Request Headers
   static Map<String, String> defaultHeaders({String? token}) {

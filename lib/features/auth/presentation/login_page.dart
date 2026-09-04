@@ -6,7 +6,7 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/routes/app_routes.dart';
-import '../../../core/services/storage_service.dart';
+import '../../../core/services/api_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,11 +17,12 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController(text: 'admin');
+  final _passwordController = TextEditingController(text: 'password');
 
   bool _obscurePassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -35,16 +36,16 @@ class _LoginPageState extends State<LoginPage> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
-    // Simulasi proses autentikasi kasir / admin ke ApiConfig.login
-    await Future.delayed(const Duration(milliseconds: 1200));
+    final username = _usernameController.text.trim();
+    final password = _passwordController.text;
 
-    // Dummy token untuk simulasi berhasil login
-    final generatedToken = 'jwt_token_${DateTime.now().millisecondsSinceEpoch}_${_usernameController.text.trim()}';
-
-    // Simpan token ke LocalStorage (SharedPreferences) menggunakan keyAuthToken
-    await StorageService.saveAuthToken(generatedToken);
+    final response = await ApiService.login(
+      username: username,
+      password: password,
+    );
 
     if (!mounted) return;
 
@@ -52,21 +53,32 @@ class _LoginPageState extends State<LoginPage> {
       _isLoading = false;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Login kasir berhasil! Selamat bekerja.'),
-        backgroundColor: AppColors.success,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-
-    // Pindah ke halaman utama POS dan hapus riwayat login dari stack navigasi
-    Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
+    if (response.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login berhasil! Selamat datang, ${response.data?.name ?? username}.'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
+    } else {
+      setState(() {
+        _errorMessage = response.message;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response.message),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   void _fillDemoCredentials() {
-    _usernameController.text = 'kasir@ipe-pos.id';
-    _passwordController.text = 'password123';
+    _usernameController.text = 'admin';
+    _passwordController.text = 'password';
   }
 
   @override
@@ -83,11 +95,36 @@ class _LoginPageState extends State<LoginPage> {
               children: [
                 // Header Logo & App Info
                 _buildHeader(),
-                AppSizes.gapH32,
+                AppSizes.gapH24,
+
+                if (_errorMessage != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSizes.sm),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                        AppSizes.gapW8,
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(color: AppColors.error, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AppSizes.gapH16,
+                ],
 
                 // Login Form Card
                 _buildLoginForm(),
-                AppSizes.gapH24,
+                AppSizes.gapH20,
 
                 // Endpoint Info & Demo Helper
                 _buildDemoHelper(),
@@ -111,8 +148,8 @@ class _LoginPageState extends State<LoginPage> {
             borderRadius: BorderRadius.circular(AppSizes.radiusMd),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                blurRadius: 12,
+                color: AppColors.primary.withValues(alpha: 0.15),
+                blurRadius: 14,
                 offset: const Offset(0, 4),
               ),
             ],
@@ -135,7 +172,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         AppSizes.gapH4,
         Text(
-          'Silakan masuk dengan akun kasir / staf POS',
+          'Sistem Kasir & Transaksi POS Intipangan',
           style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
         ),
       ],
@@ -161,18 +198,18 @@ class _LoginPageState extends State<LoginPage> {
               ),
               AppSizes.gapH16,
 
-              // Email / Username Input
+              // Username Input
               TextFormField(
                 controller: _usernameController,
-                keyboardType: TextInputType.emailAddress,
+                keyboardType: TextInputType.text,
                 decoration: const InputDecoration(
-                  labelText: 'Username atau Email',
-                  hintText: 'contoh: kasir@ipe-pos.id',
+                  labelText: 'Username',
+                  hintText: 'admin',
                   prefixIcon: Icon(Icons.person_outline),
                 ),
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
-                    return 'Username/email tidak boleh kosong';
+                    return 'Username tidak boleh kosong';
                   }
                   return null;
                 },
@@ -202,9 +239,6 @@ class _LoginPageState extends State<LoginPage> {
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Kata sandi tidak boleh kosong';
-                  }
-                  if (value.length < 6) {
-                    return 'Kata sandi minimal 6 karakter';
                   }
                   return null;
                 },
@@ -239,15 +273,26 @@ class _LoginPageState extends State<LoginPage> {
   Widget _buildDemoHelper() {
     return Column(
       children: [
-        OutlinedButton.icon(
-          onPressed: _fillDemoCredentials,
-          icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-          label: const Text('Isi Akun Demo Cepat'),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _fillDemoCredentials,
+              icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+              label: const Text('Isi Akun Default (admin)'),
+            ),
+            AppSizes.gapW12,
+            IconButton(
+              tooltip: 'Konfigurasi IP Server',
+              onPressed: () => Navigator.of(context).pushNamed(AppRoutes.settings),
+              icon: const Icon(Icons.settings_outlined),
+            ),
+          ],
         ),
-        AppSizes.gapH16,
+        AppSizes.gapH12,
         Text(
-          'Target Endpoint: ${ApiConfig.baseUrl}${ApiConfig.login}',
-          style: AppTextStyles.caption,
+          'API Server: ${ApiConfig.baseUrl}',
+          style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
           textAlign: TextAlign.center,
         ),
       ],

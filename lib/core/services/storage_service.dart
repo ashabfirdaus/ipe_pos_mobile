@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/api_config.dart';
 import '../config/app_config.dart';
 
 class StorageService {
@@ -8,13 +9,37 @@ class StorageService {
   static SharedPreferences? _prefs;
   static final Map<String, dynamic> _memoryFallback = <String, dynamic>{};
 
-  /// Inisialisasi SharedPreferences dengan penanganan error yang aman (fallback ke memory jika channel belum siap)
+  static const String keyCustomBaseUrl = 'custom_base_url';
+  static const String keySelectedBranchId = 'selected_branch_id';
+  static const String keySelectedWarehouseId = 'selected_warehouse_id';
+
+  /// Inisialisasi SharedPreferences dengan penanganan error yang aman
   static Future<void> init() async {
     try {
       _prefs = await SharedPreferences.getInstance();
+      final savedBaseUrl = _prefs?.getString(keyCustomBaseUrl);
+      if (savedBaseUrl != null && savedBaseUrl.trim().isNotEmpty) {
+        ApiConfig.baseUrl = savedBaseUrl.trim();
+      }
     } catch (e) {
-      debugPrint('[StorageService] Peringatan: SharedPreferences native channel belum terhubung ($e). Menggunakan memory storage sementara.');
+      debugPrint('[StorageService] Peringatan: $e');
     }
+  }
+
+  // --- Base URL Config ---
+  static Future<bool> saveBaseUrl(String url) async {
+    ApiConfig.baseUrl = url.trim();
+    _memoryFallback[keyCustomBaseUrl] = url.trim();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      return (await _prefs?.setString(keyCustomBaseUrl, url.trim())) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static String getBaseUrl() {
+    return _prefs?.getString(keyCustomBaseUrl) ?? ApiConfig.baseUrl;
   }
 
   // --- Auth Token Management ---
@@ -69,6 +94,31 @@ class StorageService {
     } catch (_) {
       return _memoryFallback[AppConfig.keyUserData] as String?;
     }
+  }
+
+  // --- POS Branch & Warehouse Selection Cache ---
+  static Future<void> saveSelectedBranch(int branchId) async {
+    _memoryFallback[keySelectedBranchId] = branchId;
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs?.setInt(keySelectedBranchId, branchId);
+    } catch (_) {}
+  }
+
+  static int? getSelectedBranch() {
+    return _prefs?.getInt(keySelectedBranchId) ?? _memoryFallback[keySelectedBranchId] as int?;
+  }
+
+  static Future<void> saveSelectedWarehouse(int warehouseId) async {
+    _memoryFallback[keySelectedWarehouseId] = warehouseId;
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
+      await _prefs?.setInt(keySelectedWarehouseId, warehouseId);
+    } catch (_) {}
+  }
+
+  static int? getSelectedWarehouse() {
+    return _prefs?.getInt(keySelectedWarehouseId) ?? _memoryFallback[keySelectedWarehouseId] as int?;
   }
 
   /// Hapus token dan sesi login (Logout)

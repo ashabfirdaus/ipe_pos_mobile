@@ -18,12 +18,19 @@ class AppColors {
   // Semantic Feedback Colors
   static const Color success = Color(0xFF1E8455);
   static const Color successLight = Color(0xFFE7F7EE);
+  static const Color successContainer = Color(0xFFE7F7EE);
+
   static const Color warning = Color(0xFFE5812B);
   static const Color warningLight = Color(0xFFFEF3E8);
+  static const Color warningContainer = Color(0xFFFEF3E8);
+
   static const Color error = Color(0xFFE53935);
   static const Color errorLight = Color(0xFFFFEBEE);
+  static const Color errorContainer = Color(0xFFFFEBEE);
+
   static const Color info = Color(0xFF0288D1);
   static const Color infoLight = Color(0xFFE1F5FE);
+  static const Color infoContainer = Color(0xFFE1F5FE);
 
   // Neutral & Surface Colors (Light Mode)
   static const Color background = Color(0xFFF7FAF8);

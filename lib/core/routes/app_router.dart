@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
 import 'app_routes.dart';
 import '../../features/splash/splash_page.dart';
-import '../../features/home/home_page.dart';
-import '../../features/details/details_page.dart';
 import '../../features/auth/presentation/login_page.dart';
+import '../../features/home/home_page.dart';
+import '../../features/pos/pos_page.dart';
+import '../../features/invoices/invoice_history_page.dart';
+import '../../features/invoices/invoice_detail_page.dart';
+import '../../features/item_transactions/item_transactions_page.dart';
+import '../../features/payment_notification/payment_notification_page.dart';
+import '../../features/settings/api_settings_page.dart';
+import '../../features/details/details_page.dart';
 
 class AppRouter {
   AppRouter._();
@@ -29,6 +35,46 @@ class AppRouter {
       case AppRoutes.home:
         return _buildPageRoute(
           const HomePage(),
+          settings: settings,
+        );
+
+      case AppRoutes.pos:
+        return _buildPageRoute(
+          const PosPage(),
+          settings: settings,
+        );
+
+      case AppRoutes.invoices:
+        return _buildPageRoute(
+          const InvoiceHistoryPage(),
+          settings: settings,
+        );
+
+      case AppRoutes.invoiceDetail:
+        final args = settings.arguments as Map<String, dynamic>?;
+        final invoiceId = args?['invoiceId'] ?? args?['id'] ?? 1;
+        return _buildPageRoute(
+          InvoiceDetailPage(invoiceId: invoiceId),
+          settings: settings,
+        );
+
+      case AppRoutes.itemTransactions:
+        final args = settings.arguments as Map<String, dynamic>?;
+        final itemId = args?['itemId'] ?? args?['id'];
+        return _buildPageRoute(
+          ItemTransactionsPage(initialItemId: itemId),
+          settings: settings,
+        );
+
+      case AppRoutes.paymentNotification:
+        return _buildPageRoute(
+          const PaymentNotificationPage(),
+          settings: settings,
+        );
+
+      case AppRoutes.settings:
+        return _buildPageRoute(
+          const ApiSettingsPage(),
           settings: settings,
         );
 
@@ -75,7 +121,7 @@ class AppRouter {
           ),
         );
       },
-      transitionDuration: const Duration(milliseconds: 300),
+      transitionDuration: const Duration(milliseconds: 250),
     );
   }
 

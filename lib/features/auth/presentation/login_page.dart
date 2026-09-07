@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../core/config/api_config.dart';
+
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/app_assets.dart';
 import '../../../core/constants/app_colors.dart';
@@ -17,8 +17,8 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController(text: 'admin');
-  final _passwordController = TextEditingController(text: 'password');
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   bool _obscurePassword = true;
   bool _isLoading = false;
@@ -56,12 +56,15 @@ class _LoginPageState extends State<LoginPage> {
     if (response.isSuccess) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Login berhasil! Selamat datang, ${response.data?.name ?? username}.'),
+          content: Text(
+            'Login berhasil! Selamat datang, ${response.data?.name ?? username}.',
+          ),
           backgroundColor: AppColors.success,
           behavior: SnackBarBehavior.floating,
         ),
       );
-      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(AppRoutes.home, (route) => false);
     } else {
       setState(() {
         _errorMessage = response.message;
@@ -76,62 +79,83 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _fillDemoCredentials() {
-    _usernameController.text = 'admin';
-    _passwordController.text = 'password';
-  }
-
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: AppSizes.lg, vertical: AppSizes.md),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Header Logo & App Info
-                _buildHeader(),
-                AppSizes.gapH24,
+        child: Stack(
+          children: [
+            Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSizes.lg,
+                  vertical: AppSizes.md,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Header Logo & App Info
+                    _buildHeader(),
+                    AppSizes.gapH24,
 
-                if (_errorMessage != null) ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSizes.sm),
-                    decoration: BoxDecoration(
-                      color: AppColors.error.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                      border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppColors.error, size: 20),
-                        AppSizes.gapW8,
-                        Expanded(
-                          child: Text(
-                            _errorMessage!,
-                            style: const TextStyle(color: AppColors.error, fontSize: 13),
+                    if (_errorMessage != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(AppSizes.sm),
+                        decoration: BoxDecoration(
+                          color: AppColors.error.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(
+                            AppSizes.radiusSm,
+                          ),
+                          border: Border.all(
+                            color: AppColors.error.withValues(alpha: 0.3),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  AppSizes.gapH16,
-                ],
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.error_outline,
+                              color: AppColors.error,
+                              size: 20,
+                            ),
+                            AppSizes.gapW8,
+                            Expanded(
+                              child: Text(
+                                _errorMessage!,
+                                style: const TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      AppSizes.gapH16,
+                    ],
 
-                // Login Form Card
-                _buildLoginForm(),
-                AppSizes.gapH20,
-
-                // Endpoint Info & Demo Helper
-                _buildDemoHelper(),
-                SizedBox(height: bottomInset > 0 ? bottomInset : 0),
-              ],
+                    // Login Form Card
+                    _buildLoginForm(),
+                    SizedBox(height: bottomInset > 0 ? bottomInset : 0),
+                  ],
+                ),
+              ),
             ),
-          ),
+            Positioned(
+              top: AppSizes.xs,
+              right: AppSizes.xs,
+              child: IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Pengaturan Server',
+                onPressed: () async {
+                  await Navigator.of(context).pushNamed(AppRoutes.settings);
+                  if (mounted) setState(() {});
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -173,7 +197,9 @@ class _LoginPageState extends State<LoginPage> {
         AppSizes.gapH4,
         Text(
           'Sistem Kasir & Transaksi POS Intipangan',
-          style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+          style: AppTextStyles.bodyMedium.copyWith(
+            color: AppColors.textSecondary,
+          ),
         ),
       ],
     );
@@ -192,10 +218,7 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Masuk Akun Kasir',
-                style: AppTextStyles.h3,
-              ),
+              const Text('Masuk Akun Kasir', style: AppTextStyles.h3),
               AppSizes.gapH16,
 
               // Username Input
@@ -226,7 +249,9 @@ class _LoginPageState extends State<LoginPage> {
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
                       color: AppColors.textSecondary,
                     ),
                     onPressed: () {
@@ -257,7 +282,9 @@ class _LoginPageState extends State<LoginPage> {
                           height: 24,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
                           ),
                         )
                       : const Text('Masuk POS'),
@@ -267,35 +294,6 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildDemoHelper() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            OutlinedButton.icon(
-              onPressed: _fillDemoCredentials,
-              icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
-              label: const Text('Isi Akun Default (admin)'),
-            ),
-            AppSizes.gapW12,
-            IconButton(
-              tooltip: 'Konfigurasi IP Server',
-              onPressed: () => Navigator.of(context).pushNamed(AppRoutes.settings),
-              icon: const Icon(Icons.settings_outlined),
-            ),
-          ],
-        ),
-        AppSizes.gapH12,
-        Text(
-          'API Server: ${ApiConfig.baseUrl}',
-          style: AppTextStyles.caption.copyWith(color: AppColors.textSecondary),
-          textAlign: TextAlign.center,
-        ),
-      ],
     );
   }
 }

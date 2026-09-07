@@ -2,7 +2,7 @@ class ApiConfig {
   ApiConfig._();
 
   // Default Dev Base URL requested by user
-  static const String defaultBaseUrl = 'http://192.168.1.6:8000/api';
+  static const String defaultBaseUrl = 'http://192.168.1.6:8080/api';
 
   // Active Base URL (can be customized via settings or loaded from local storage)
   static String baseUrl = defaultBaseUrl;
@@ -27,11 +27,16 @@ class ApiConfig {
   static String posInvoiceVoid(dynamic id) => '/pos/invoices/$id/void';
 
   // 3. Item Transactions Endpoints
-  static String itemTransactionSummary(dynamic itemId) => '/item/$itemId/transaction-summary';
-  static String itemTransactionDetails(dynamic itemId) => '/item/$itemId/transaction-details';
-  static String itemTransactionTotal(dynamic itemId) => '/item/$itemId/transaction-total';
-  static String itemTransactionRowsSummary(dynamic itemId) => '/item/$itemId/transaction-rows-summary';
-  static String itemTransactionTotalRows(dynamic itemId) => '/item/$itemId/transaction-total-rows';
+  static String itemTransactionSummary(dynamic itemId) =>
+      '/item/$itemId/transaction-summary';
+  static String itemTransactionDetails(dynamic itemId) =>
+      '/item/$itemId/transaction-details';
+  static String itemTransactionTotal(dynamic itemId) =>
+      '/item/$itemId/transaction-total';
+  static String itemTransactionRowsSummary(dynamic itemId) =>
+      '/item/$itemId/transaction-rows-summary';
+  static String itemTransactionTotalRows(dynamic itemId) =>
+      '/item/$itemId/transaction-total-rows';
 
   // 4. Payment Notification Endpoint
   static const String savePaymentNotification = '/save_payment_notification';

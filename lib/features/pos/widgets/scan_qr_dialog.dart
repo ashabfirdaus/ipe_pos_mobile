@@ -8,13 +8,13 @@ import '../../../core/utils/currency_formatter.dart';
 import 'camera_scanner_page.dart';
 
 class ScanQrDialog extends StatefulWidget {
-  final int warehouseId;
+  final int? warehouseId;
   final int? branchId;
   final Function(ProductModel product, String qrcode) onProductFound;
 
   const ScanQrDialog({
     super.key,
-    required this.warehouseId,
+    this.warehouseId,
     this.branchId,
     required this.onProductFound,
   });
@@ -76,7 +76,9 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
       });
     } else {
       setState(() {
-        _errorMessage = res.message;
+        _errorMessage = res.message.isNotEmpty
+            ? res.message
+            : 'Produk dengan kode "$cleanCode" tidak ditemukan.';
       });
     }
   }
@@ -92,7 +94,8 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
-      child: Padding(
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
         padding: const EdgeInsets.all(AppSizes.lg),
         child: SingleChildScrollView(
           child: Column(
@@ -103,184 +106,167 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
+                  const Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryContainer,
-                          borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-                        ),
-                        child: const Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
-                      ),
-                      AppSizes.gapW12,
-                      const Text('Scan QR / Barcode', style: AppTextStyles.h3),
+                      Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
+                      AppSizes.gapW8,
+                      Text('Scan / Cari Produk', style: AppTextStyles.h3),
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close),
+                    icon: const Icon(Icons.close, size: 20),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
-              AppSizes.gapH16,
+              const Divider(),
+              AppSizes.gapH12,
 
-              // Camera Scanner Launch Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                    ),
-                  ),
-                  onPressed: _openCameraScanner,
-                  icon: const Icon(Icons.camera_alt_rounded),
-                  label: const Text(
-                    'Buka Kamera Scanner',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              AppSizes.gapH16,
-
-              // Divider with 'atau input manual'
+              // Input Row
               Row(
                 children: [
-                  const Expanded(child: Divider()),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Text('atau input manual', style: AppTextStyles.caption.copyWith(color: AppColors.textMuted)),
+                  Expanded(
+                    child: TextField(
+                      controller: _codeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Kode Produk / Barcode / QR',
+                        hintText: 'Misal: PRD-001 / Scan',
+                        prefixIcon: Icon(Icons.barcode_reader),
+                      ),
+                      onSubmitted: _handleScan,
+                    ),
                   ),
-                  const Expanded(child: Divider()),
+                  AppSizes.gapW8,
+                  IconButton.filled(
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
+                    ),
+                    icon: const Icon(Icons.camera_alt_rounded, color: Colors.white),
+                    tooltip: 'Buka Kamera Barcode',
+                    onPressed: _openCameraScanner,
+                  ),
                 ],
-              ),
-              AppSizes.gapH16,
-
-              // Code Input Field
-              TextField(
-                controller: _codeController,
-                decoration: InputDecoration(
-                  labelText: 'Kode QR / Barcode',
-                  hintText: 'contoh: STK-2026-0001 / 899123456',
-                  prefixIcon: const Icon(Icons.barcode_reader),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.search),
-                    onPressed: () => _handleScan(_codeController.text),
-                  ),
-                ),
-                onSubmitted: _handleScan,
               ),
               AppSizes.gapH12,
 
-              // Quick demo sample buttons
-              Wrap(
-                spacing: 8,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.auto_fix_high_rounded, size: 14),
-                    label: const Text('Sample: STK-2026-0001', style: TextStyle(fontSize: 11)),
-                    onPressed: () {
-                      _codeController.text = 'STK-2026-0001';
-                      _handleScan('STK-2026-0001');
-                    },
-                  ),
-                ],
+              // Search Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _isLoading ? null : () => _handleScan(_codeController.text),
+                  icon: _isLoading
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.search_rounded),
+                  label: const Text('Cari Item Produk'),
+                ),
               ),
               AppSizes.gapH16,
 
-              if (_isLoading)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-
+              // Error State
               if (_errorMessage != null)
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(AppSizes.sm),
                   decoration: BoxDecoration(
                     color: AppColors.error.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                    border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
                       const Icon(Icons.error_outline, color: AppColors.error, size: 20),
                       AppSizes.gapW8,
                       Expanded(
-                        child: Text(_errorMessage!, style: const TextStyle(color: AppColors.error, fontSize: 13)),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: AppColors.error, fontSize: 13),
+                        ),
                       ),
                     ],
                   ),
                 ),
 
+              // Product Result Card
               if (_scannedProduct != null) ...[
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(AppSizes.md),
                   decoration: BoxDecoration(
-                    color: AppColors.success.withValues(alpha: 0.08),
+                    color: AppColors.primary.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                    border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
-                          AppSizes.gapW8,
-                          Expanded(
-                            child: Text(
-                              _scannedProduct!.name,
-                              style: AppTextStyles.h3.copyWith(fontSize: 15),
-                            ),
-                          ),
-                        ],
-                      ),
-                      AppSizes.gapH8,
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Harga Satuan:', style: AppTextStyles.bodySmall),
-                          Text(
-                            CurrencyFormatter.format(_scannedProduct!.price),
-                            style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primary),
-                          ),
-                        ],
-                      ),
-                      AppSizes.gapH4,
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Sisa Stok Gudang:', style: AppTextStyles.bodySmall),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            width: 50,
+                            height: 50,
                             decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                            ),
+                            child: const Icon(Icons.inventory_2_rounded, color: AppColors.primary),
+                          ),
+                          AppSizes.gapW12,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _scannedProduct!.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                                if (_scannedProduct!.code != null && _scannedProduct!.code!.isNotEmpty)
+                                  Text(
+                                    'Kode: ${_scannedProduct!.code}',
+                                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                  ),
+                                AppSizes.gapH4,
+                                Text(
+                                  CurrencyFormatter.format(_scannedProduct!.price),
+                                  style: const TextStyle(
+                                    color: AppColors.primary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Sisa Stok: ${_scannedProduct!.stock}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
                               color: _scannedProduct!.stock > 0 ? AppColors.success : AppColors.error,
-                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: Text(
-                              '${_scannedProduct!.stock.toStringAsFixed(0)} ${_scannedProduct!.unit ?? 'pcs'}',
-                              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                             ),
+                            onPressed: _scannedProduct!.stock > 0 ? _confirmAdd : null,
+                            icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                            label: const Text('Tambah ke Keranjang'),
                           ),
                         ],
                       ),
                     ],
-                  ),
-                ),
-                AppSizes.gapH20,
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: _scannedProduct!.stock > 0 ? _confirmAdd : null,
-                    icon: const Icon(Icons.add_shopping_cart_rounded),
-                    label: const Text('Tambahkan ke Keranjang'),
                   ),
                 ),
               ],

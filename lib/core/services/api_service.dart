@@ -318,15 +318,15 @@ class ApiService {
 
   /// Get products with stock in warehouse
   static Future<ApiResponse<List<ProductModel>>> getProducts({
-    required int warehouseId,
+    int? warehouseId,
     int? branchId,
     String? search,
     int limit = 50,
   }) async {
     final query = <String, dynamic>{
-      'warehouse_id': warehouseId,
       'limit': limit,
     };
+    if (warehouseId != null) query['warehouse_id'] = warehouseId;
     if (branchId != null) query['branch_id'] = branchId;
     if (search != null && search.isNotEmpty) query['search'] = search;
 
@@ -349,13 +349,13 @@ class ApiService {
   /// Scan QR Code / Barcode to retrieve product & stock
   static Future<ApiResponse<ProductModel>> scanQr({
     required String qrcode,
-    required int warehouseId,
+    int? warehouseId,
     int? branchId,
   }) async {
     final body = <String, dynamic>{
       'qrcode': qrcode,
-      'warehouse_id': warehouseId,
     };
+    if (warehouseId != null) body['warehouse_id'] = warehouseId;
     if (branchId != null) body['branch_id'] = branchId;
 
     final res = await post(ApiConfig.posScanQr, body: body);

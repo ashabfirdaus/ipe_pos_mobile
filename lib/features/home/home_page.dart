@@ -1,6 +1,7 @@
 import 'dart:convert';
+
 import 'package:flutter/material.dart';
-import '../../core/config/api_config.dart';
+
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
@@ -57,7 +58,10 @@ class _HomePageState extends State<HomePage> {
         title: const Text('Konfirmasi Keluar'),
         content: const Text('Apakah Anda yakin ingin keluar dari sesi kasir?'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Batal')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -70,7 +74,8 @@ class _HomePageState extends State<HomePage> {
     if (confirm == true) {
       await ApiService.logout();
       if (!mounted) return;
-      Navigator.of(context).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+      Navigator.of(context)
+          .pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
     }
   }
 
@@ -112,11 +117,6 @@ class _HomePageState extends State<HomePage> {
               AppSizes.gapH12,
               _buildMenuGrid(),
               AppSizes.gapH24,
-
-              // API Status & Connection Banner
-              const Text('Status Koneksi API Server', style: AppTextStyles.h3),
-              AppSizes.gapH8,
-              _buildApiStatusCard(),
             ],
           ),
         ),
@@ -147,7 +147,11 @@ class _HomePageState extends State<HomePage> {
           CircleAvatar(
             radius: 28,
             backgroundColor: Colors.white.withValues(alpha: 0.2),
-            child: const Icon(Icons.person_rounded, size: 36, color: Colors.white),
+            child: const Icon(
+              Icons.person_rounded,
+              size: 36,
+              color: Colors.white,
+            ),
           ),
           AppSizes.gapW16,
           Expanded(
@@ -156,19 +160,21 @@ class _HomePageState extends State<HomePage> {
               children: [
                 Text(
                   'Halo, $name',
-                  style: AppTextStyles.h2.copyWith(color: Colors.white, fontSize: 18),
+                  style: AppTextStyles.h2.copyWith(
+                    color: Colors.white,
+                    fontSize: 18,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
                 AppSizes.gapH4,
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Text(
-                    role,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    'Peran: ${role.toString()} | POS Mobile',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
@@ -178,7 +184,10 @@ class _HomePageState extends State<HomePage> {
             const SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
             ),
         ],
       ),
@@ -206,14 +215,16 @@ class _HomePageState extends State<HomePage> {
         subtitle: 'Riwayat keluar masuk stok item',
         icon: Icons.inventory_rounded,
         color: const Color(0xFF00897B),
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.itemTransactions),
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRoutes.itemTransactions),
       ),
       _MenuItem(
         title: 'Lapor Pembayaran',
         subtitle: 'Konfirmasi bukti bayar masuk',
         icon: Icons.payment_rounded,
         color: const Color(0xFFD81B60),
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.paymentNotification),
+        onTap: () =>
+            Navigator.of(context).pushNamed(AppRoutes.paymentNotification),
       ),
     ];
 
@@ -231,7 +242,9 @@ class _HomePageState extends State<HomePage> {
         final item = menuItems[index];
         return Card(
           elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+          ),
           child: InkWell(
             borderRadius: BorderRadius.circular(AppSizes.radiusLg),
             onTap: item.onTap,
@@ -252,12 +265,18 @@ class _HomePageState extends State<HomePage> {
                   const Spacer(),
                   Text(
                     item.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
                   ),
                   AppSizes.gapH4,
                   Text(
                     item.subtitle,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -267,51 +286,6 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildApiStatusCard() {
-    return Card(
-      child: Padding(
-        padding: AppSizes.paddingCard,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.cloud_done_rounded, color: AppColors.success, size: 20),
-                AppSizes.gapW8,
-                const Text('Target Endpoint Server', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
-            AppSizes.gapH8,
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
-              ),
-              child: SelectableText(
-                ApiConfig.baseUrl,
-                style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-            AppSizes.gapH8,
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: () async {
-                  await Navigator.of(context).pushNamed(AppRoutes.settings);
-                  setState(() {});
-                },
-                icon: const Icon(Icons.edit_rounded, size: 16),
-                label: const Text('Ganti URL API Server', style: TextStyle(fontSize: 12)),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

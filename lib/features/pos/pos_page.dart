@@ -4,7 +4,6 @@ import '../../core/constants/app_sizes.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/pos_models.dart';
 import '../../core/services/api_service.dart';
-import '../../core/services/storage_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/cart_sheet.dart';
 import 'widgets/scan_qr_dialog.dart';
@@ -21,8 +20,6 @@ class _PosPageState extends State<PosPage> {
   bool _isLoadingInitial = true;
   bool _isLoadingProducts = false;
 
-  List<BranchModel> _branches = [];
-  List<WarehouseModel> _warehouses = [];
   List<PaymentMethodModel> _paymentMethods = [];
   List<PromoModel> _promos = [];
   double _ppnRate = 0.0;
@@ -52,32 +49,9 @@ class _PosPageState extends State<PosPage> {
       _isLoadingInitial = true;
     });
 
-    final savedBranchId = StorageService.getSelectedBranch();
-    final savedWarehouseId = StorageService.getSelectedWarehouse();
-
-    // 1. Fetch initial pos data
-    final initialRes = await ApiService.getPosInitialData(
-      branchId: savedBranchId,
-      warehouseId: savedWarehouseId,
-    );
-
-    // 2. Fetch branches
-    final branchesRes = await ApiService.getBranches();
-
-    // 3. Fetch warehouses
-    final warehousesRes = await ApiService.getWarehouses(branchId: savedBranchId);
+    final initialRes = await ApiService.getPosInitialData();
 
     if (!mounted) return;
-
-    if (branchesRes.isSuccess && branchesRes.data != null && branchesRes.data!.isNotEmpty) {
-      _branches = branchesRes.data!;
-      _selectedBranchId = savedBranchId ?? _branches.first.id;
-    }
-
-    if (warehousesRes.isSuccess && warehousesRes.data != null && warehousesRes.data!.isNotEmpty) {
-      _warehouses = warehousesRes.data!;
-      _selectedWarehouseId = savedWarehouseId ?? _warehouses.first.id;
-    }
 
     if (initialRes.isSuccess && initialRes.data != null) {
       final initData = initialRes.data!;
@@ -86,24 +60,10 @@ class _PosPageState extends State<PosPage> {
           : [PaymentMethodModel(id: 1, name: 'Tunai (Cash)')];
       _promos = initData.promos;
       _ppnRate = initData.ppnRate;
-
-      if (_selectedBranchId == null && initData.defaultBranch != null) {
-        _selectedBranchId = initData.defaultBranch!.id;
-      }
-      if (_selectedWarehouseId == null && initData.defaultWarehouse != null) {
-        _selectedWarehouseId = initData.defaultWarehouse!.id;
-      }
+      _selectedBranchId = initData.defaultBranch?.id;
+      _selectedWarehouseId = initData.defaultWarehouse?.id;
     }
 
-    // Fallback defaults if list is empty from server
-    if (_branches.isEmpty) {
-      _branches = [BranchModel(id: 1, name: 'Cabang Utama')];
-      _selectedBranchId = 1;
-    }
-    if (_warehouses.isEmpty) {
-      _warehouses = [WarehouseModel(id: 1, name: 'Gudang Pusat', branchId: 1)];
-      _selectedWarehouseId = 1;
-    }
     if (_paymentMethods.isEmpty) {
       _paymentMethods = [
         PaymentMethodModel(id: 1, name: 'Tunai (Cash)'),
@@ -116,34 +76,16 @@ class _PosPageState extends State<PosPage> {
       _isLoadingInitial = false;
     });
 
-    if (_selectedWarehouseId != null) {
-      _loadProducts();
-    }
-  }
-
-  Future<void> _loadWarehousesForBranch(int branchId) async {
-    final res = await ApiService.getWarehouses(branchId: branchId);
-    if (!mounted) return;
-
-    if (res.isSuccess && res.data != null && res.data!.isNotEmpty) {
-      setState(() {
-        _warehouses = res.data!;
-        _selectedWarehouseId = _warehouses.first.id;
-      });
-      StorageService.saveSelectedWarehouse(_selectedWarehouseId!);
-      _loadProducts();
-    }
+    _loadProducts();
   }
 
   Future<void> _loadProducts({String? search}) async {
-    if (_selectedWarehouseId == null) return;
-
     setState(() {
       _isLoadingProducts = true;
     });
 
     final res = await ApiService.getProducts(
-      warehouseId: _selectedWarehouseId!,
+      warehouseId: _selectedWarehouseId,
       branchId: _selectedBranchId,
       search: search,
     );
@@ -211,17 +153,10 @@ class _PosPageState extends State<PosPage> {
   }
 
   void _openScanQrDialog() {
-    if (_selectedWarehouseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih gudang terlebih dahulu!')),
-      );
-      return;
-    }
-
     showDialog(
       context: context,
       builder: (ctx) => ScanQrDialog(
-        warehouseId: _selectedWarehouseId!,
+        warehouseId: _selectedWarehouseId,
         branchId: _selectedBranchId,
         onProductFound: (product, qrcode) {
           _addToCart(product, qrcode: qrcode);
@@ -231,13 +166,6 @@ class _PosPageState extends State<PosPage> {
   }
 
   Future<void> _openDirectCameraScanner() async {
-    if (_selectedWarehouseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Pilih gudang terlebih dahulu!')),
-      );
-      return;
-    }
-
     final scannedCode = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (ctx) => const CameraScannerPage(),
@@ -255,7 +183,7 @@ class _PosPageState extends State<PosPage> {
 
       final res = await ApiService.scanQr(
         qrcode: scannedCode,
-        warehouseId: _selectedWarehouseId!,
+        warehouseId: _selectedWarehouseId,
         branchId: _selectedBranchId,
       );
 
@@ -266,7 +194,7 @@ class _PosPageState extends State<PosPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res.message.isNotEmpty ? res.message : 'Produk dengan kode "$scannedCode" tidak ditemukan di gudang ini.'),
+            content: Text(res.message.isNotEmpty ? res.message : 'Produk dengan kode "$scannedCode" tidak ditemukan.'),
             backgroundColor: AppColors.error,
           ),
         );
@@ -281,8 +209,8 @@ class _PosPageState extends State<PosPage> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => CartSheet(
         cartItems: _cartItems,
-        branchId: _selectedBranchId ?? 1,
-        warehouseId: _selectedWarehouseId ?? 1,
+        branchId: _selectedBranchId,
+        warehouseId: _selectedWarehouseId,
         paymentMethods: _paymentMethods,
         promos: _promos,
         ppnRate: _ppnRate,
@@ -327,9 +255,6 @@ class _PosPageState extends State<PosPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Top Branch & Warehouse Selector
-                _buildBranchWarehouseBar(),
-
                 // Search & Scan Bar
                 _buildSearchBar(),
 
@@ -346,65 +271,6 @@ class _PosPageState extends State<PosPage> {
                 if (_cartItems.isNotEmpty) _buildBottomCartBar(),
               ],
             ),
-    );
-  }
-
-  Widget _buildBranchWarehouseBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 8),
-      color: Colors.white,
-      child: Row(
-        children: [
-          // Branch Dropdown
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              initialValue: _selectedBranchId,
-              isDense: true,
-              decoration: const InputDecoration(
-                labelText: 'Cabang',
-                prefixIcon: Icon(Icons.storefront_rounded, size: 18),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                border: OutlineInputBorder(),
-              ),
-              items: _branches.map((b) => DropdownMenuItem(value: b.id, child: Text(b.name, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _selectedBranchId = val;
-                  });
-                  StorageService.saveSelectedBranch(val);
-                  _loadWarehousesForBranch(val);
-                }
-              },
-            ),
-          ),
-          AppSizes.gapW8,
-
-          // Warehouse Dropdown
-          Expanded(
-            child: DropdownButtonFormField<int>(
-              initialValue: _selectedWarehouseId,
-              isDense: true,
-              decoration: const InputDecoration(
-                labelText: 'Gudang Stok',
-                prefixIcon: Icon(Icons.warehouse_rounded, size: 18),
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                border: OutlineInputBorder(),
-              ),
-              items: _warehouses.map((w) => DropdownMenuItem(value: w.id, child: Text(w.name, overflow: TextOverflow.ellipsis))).toList(),
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _selectedWarehouseId = val;
-                  });
-                  StorageService.saveSelectedWarehouse(val);
-                  _loadProducts(search: _searchController.text.trim());
-                }
-              },
-            ),
-          ),
-        ],
-      ),
     );
   }
 

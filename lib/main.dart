@@ -4,10 +4,12 @@ import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/storage_service.dart';
+import 'core/services/printer_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await StorageService.init();
+  await PrinterService.instance.init();
   runApp(const MyApp());
 }
 

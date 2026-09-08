@@ -85,20 +85,26 @@ class PaymentMethodModel {
   final String name;
   final String? code;
   final String? type;
+  final String? status;
 
   PaymentMethodModel({
     required this.id,
     required this.name,
     this.code,
     this.type,
+    this.status,
   });
 
   factory PaymentMethodModel.fromJson(Map<String, dynamic> json) {
     return PaymentMethodModel(
       id: int.tryParse(json['id']?.toString() ?? '') ?? 1,
-      name: json['name']?.toString() ?? json['payment_name']?.toString() ?? 'Tunai',
+      name: json['method_name']?.toString() ??
+          json['name']?.toString() ??
+          json['payment_name']?.toString() ??
+          'Tunai',
       code: json['code']?.toString(),
       type: json['type']?.toString(),
+      status: json['status']?.toString(),
     );
   }
 }
@@ -121,9 +127,9 @@ class PromoModel {
   factory PromoModel.fromJson(Map<String, dynamic> json) {
     return PromoModel(
       id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
-      name: json['name']?.toString() ?? 'Promo',
-      code: json['code']?.toString(),
-      discountType: json['discount_type']?.toString() ?? 'fixed',
+      name: json['name']?.toString() ?? json['promo_name']?.toString() ?? 'Promo',
+      code: json['code']?.toString() ?? json['promo_code']?.toString(),
+      discountType: json['discount_type']?.toString() ?? json['type']?.toString() ?? 'fixed',
       discountValue: double.tryParse(json['discount_value']?.toString() ?? json['discount']?.toString() ?? '0') ?? 0.0,
     );
   }
@@ -134,6 +140,7 @@ class PosInitialDataModel {
   final WarehouseModel? defaultWarehouse;
   final List<PaymentMethodModel> paymentMethods;
   final List<PromoModel> promos;
+  final int defaultPpnType;
   final double ppnRate;
 
   PosInitialDataModel({
@@ -141,45 +148,74 @@ class PosInitialDataModel {
     this.defaultWarehouse,
     required this.paymentMethods,
     required this.promos,
+    this.defaultPpnType = 0,
     required this.ppnRate,
   });
 
   factory PosInitialDataModel.fromJson(Map<String, dynamic> json) {
     BranchModel? branch;
-    if (json['default_branch'] != null) {
-      branch = BranchModel.fromJson(json['default_branch'] is Map ? json['default_branch'] : {});
+    if (json['default_branch'] != null && json['default_branch'] is Map) {
+      branch = BranchModel.fromJson(
+        Map<String, dynamic>.from(json['default_branch'] as Map),
+      );
     }
 
     WarehouseModel? warehouse;
-    if (json['default_warehouse'] != null) {
-      warehouse = WarehouseModel.fromJson(json['default_warehouse'] is Map ? json['default_warehouse'] : {});
+    if (json['default_warehouse'] != null && json['default_warehouse'] is Map) {
+      warehouse = WarehouseModel.fromJson(
+        Map<String, dynamic>.from(json['default_warehouse'] as Map),
+      );
     }
 
     final pmList = <PaymentMethodModel>[];
-    if (json['payment_methods'] is List) {
-      for (final item in json['payment_methods']) {
-        if (item is Map<String, dynamic>) {
-          pmList.add(PaymentMethodModel.fromJson(item));
+    final rawPm = json['payment_methods'];
+    if (rawPm is List) {
+      for (final item in rawPm) {
+        if (item is Map) {
+          final pm = PaymentMethodModel.fromJson(
+            Map<String, dynamic>.from(item),
+          );
+          if (pm.status == null || pm.status == '1' || pm.status == 'active') {
+            pmList.add(pm);
+          }
         }
       }
     }
 
     final promoList = <PromoModel>[];
-    if (json['promos'] is List) {
-      for (final item in json['promos']) {
-        if (item is Map<String, dynamic>) {
-          promoList.add(PromoModel.fromJson(item));
+    final rawPromos = json['active_promos'] ?? json['promos'];
+    if (rawPromos is List) {
+      for (final item in rawPromos) {
+        if (item is Map) {
+          promoList.add(
+            PromoModel.fromJson(Map<String, dynamic>.from(item)),
+          );
         }
       }
     }
 
-    final ppn = double.tryParse(json['ppn_rate']?.toString() ?? json['tax_rate']?.toString() ?? json['ppn']?.toString() ?? '0') ?? 0.0;
+    final ppn = double.tryParse(
+          json['percentage_ppn']?.toString() ??
+              json['ppn_rate']?.toString() ??
+              json['tax_rate']?.toString() ??
+              json['ppn']?.toString() ??
+              '0',
+        ) ??
+        0.0;
+
+    final ppnType = int.tryParse(
+          json['default_ppn_type']?.toString() ??
+              json['ppn_type']?.toString() ??
+              '0',
+        ) ??
+        0;
 
     return PosInitialDataModel(
       defaultBranch: branch,
       defaultWarehouse: warehouse,
       paymentMethods: pmList,
       promos: promoList,
+      defaultPpnType: ppnType,
       ppnRate: ppn,
     );
   }
@@ -195,6 +231,8 @@ class ProductModel {
   final double stock;
   final String? unit;
   final String? categoryName;
+  final String? imagePath;
+  final String? qrcode;
 
   ProductModel({
     required this.id,
@@ -206,21 +244,48 @@ class ProductModel {
     required this.stock,
     this.unit,
     this.categoryName,
+    this.imagePath,
+    this.qrcode,
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
-    final parsedId = int.tryParse(json['id']?.toString() ?? '') ?? 0;
-    final parsedItemId = int.tryParse(json['item_id']?.toString() ?? '') ?? parsedId;
+    final parsedId = int.tryParse(
+          json['id']?.toString() ??
+              json['stock_id']?.toString() ??
+              json['item_id']?.toString() ??
+              '',
+        ) ??
+        0;
+    final parsedItemId = int.tryParse(
+          json['item_id']?.toString() ??
+              json['id']?.toString() ??
+              '',
+        ) ??
+        parsedId;
     return ProductModel(
       id: parsedId,
       itemId: parsedItemId,
       name: json['name']?.toString() ?? json['item_name']?.toString() ?? 'Produk',
       code: json['code']?.toString() ?? json['item_code']?.toString(),
-      barcode: json['barcode']?.toString(),
-      price: double.tryParse(json['price']?.toString() ?? json['sell_price']?.toString() ?? '0') ?? 0.0,
-      stock: double.tryParse(json['stock']?.toString() ?? json['qty']?.toString() ?? '0') ?? 0.0,
-      unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'pcs',
+      barcode: json['barcode']?.toString() ?? json['item_barcode']?.toString() ?? json['qrcode']?.toString(),
+      price: double.tryParse(
+            json['selling_price']?.toString() ??
+                json['price']?.toString() ??
+                json['sell_price']?.toString() ??
+                '0',
+          ) ??
+          0.0,
+      stock: double.tryParse(
+            json['remaining_qty']?.toString() ??
+                json['stock']?.toString() ??
+                json['qty']?.toString() ??
+                '0',
+          ) ??
+          0.0,
+      unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'Pcs',
       categoryName: json['category_name']?.toString() ?? json['category']?.toString(),
+      imagePath: json['image_path']?.toString() ?? json['image']?.toString(),
+      qrcode: json['qrcode']?.toString(),
     );
   }
 }
@@ -260,6 +325,8 @@ class InvoiceItemModel {
   final double discount;
   final double subTotal;
   final String? qrcode;
+  final String? unit;
+  final String? itemCode;
 
   InvoiceItemModel({
     required this.itemId,
@@ -269,6 +336,8 @@ class InvoiceItemModel {
     required this.discount,
     required this.subTotal,
     this.qrcode,
+    this.unit,
+    this.itemCode,
   });
 
   factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
@@ -280,6 +349,8 @@ class InvoiceItemModel {
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
       qrcode: json['qrcode']?.toString(),
+      unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'Pcs',
+      itemCode: json['item_code']?.toString() ?? json['code']?.toString(),
     );
   }
 }
@@ -292,6 +363,7 @@ class InvoiceModel {
   final String? branchName;
   final String? warehouseName;
   final String? paymentMethodName;
+  final String? promoName;
   final double subTotal;
   final double discount;
   final double ppn;
@@ -310,6 +382,7 @@ class InvoiceModel {
     this.branchName,
     this.warehouseName,
     this.paymentMethodName,
+    this.promoName,
     required this.subTotal,
     required this.discount,
     required this.ppn,
@@ -320,6 +393,46 @@ class InvoiceModel {
     this.voidAt,
     this.items = const [],
   });
+
+  InvoiceModel copyWith({
+    dynamic id,
+    String? invoiceNo,
+    String? createdAt,
+    int? status,
+    String? branchName,
+    String? warehouseName,
+    String? paymentMethodName,
+    String? promoName,
+    double? subTotal,
+    double? discount,
+    double? ppn,
+    double? grandTotal,
+    double? cash,
+    double? change,
+    String? voidDesc,
+    String? voidAt,
+    List<InvoiceItemModel>? items,
+  }) {
+    return InvoiceModel(
+      id: id ?? this.id,
+      invoiceNo: invoiceNo ?? this.invoiceNo,
+      createdAt: createdAt ?? this.createdAt,
+      status: status ?? this.status,
+      branchName: branchName ?? this.branchName,
+      warehouseName: warehouseName ?? this.warehouseName,
+      paymentMethodName: paymentMethodName ?? this.paymentMethodName,
+      promoName: promoName ?? this.promoName,
+      subTotal: subTotal ?? this.subTotal,
+      discount: discount ?? this.discount,
+      ppn: ppn ?? this.ppn,
+      grandTotal: grandTotal ?? this.grandTotal,
+      cash: cash ?? this.cash,
+      change: change ?? this.change,
+      voidDesc: voidDesc ?? this.voidDesc,
+      voidAt: voidAt ?? this.voidAt,
+      items: items ?? this.items,
+    );
+  }
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     final itemList = <InvoiceItemModel>[];
@@ -339,6 +452,7 @@ class InvoiceModel {
       branchName: json['branch_name']?.toString(),
       warehouseName: json['warehouse_name']?.toString(),
       paymentMethodName: json['payment_method_name']?.toString() ?? json['payment_method']?.toString(),
+      promoName: json['promo_name']?.toString() ?? json['promo']?['name']?.toString() ?? json['promo']?.toString(),
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       ppn: double.tryParse(json['ppn']?.toString() ?? json['tax']?.toString() ?? '0') ?? 0.0,

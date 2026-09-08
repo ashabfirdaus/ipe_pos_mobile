@@ -4,11 +4,13 @@ import '../../features/splash/splash_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/home/home_page.dart';
 import '../../features/pos/pos_page.dart';
+import '../../features/pos/pos_product_catalog_page.dart';
 import '../../features/invoices/invoice_history_page.dart';
 import '../../features/invoices/invoice_detail_page.dart';
 import '../../features/item_transactions/item_transactions_page.dart';
 import '../../features/payment_notification/payment_notification_page.dart';
 import '../../features/settings/api_settings_page.dart';
+import '../../features/settings/printer_settings_page.dart';
 import '../../features/details/details_page.dart';
 
 class AppRouter {
@@ -44,6 +46,18 @@ class AppRouter {
           settings: settings,
         );
 
+      case AppRoutes.posProducts:
+        final args = settings.arguments as Map<String, dynamic>?;
+        return _buildPageRoute(
+          PosProductCatalogPage(
+            branchId: args?['branchId'],
+            warehouseId: args?['warehouseId'],
+            cartItems: args?['cartItems'] ?? [],
+            onCartUpdated: args?['onCartUpdated'] ?? () {},
+          ),
+          settings: settings,
+        );
+
       case AppRoutes.invoices:
         return _buildPageRoute(
           const InvoiceHistoryPage(),
@@ -75,6 +89,12 @@ class AppRouter {
       case AppRoutes.settings:
         return _buildPageRoute(
           const ApiSettingsPage(),
+          settings: settings,
+        );
+
+      case AppRoutes.printerSettings:
+        return _buildPageRoute(
+          const PrinterSettingsPage(),
           settings: settings,
         );
 

@@ -6,11 +6,12 @@ import '../../../core/models/pos_models.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/utils/currency_formatter.dart';
 import 'camera_scanner_page.dart';
+import 'stock_qty_confirm_dialog.dart';
 
 class ScanQrDialog extends StatefulWidget {
   final int? warehouseId;
   final int? branchId;
-  final Function(ProductModel product, String qrcode) onProductFound;
+  final Function(ProductModel product, String qrcode, int qty) onProductFound;
 
   const ScanQrDialog({
     super.key,
@@ -83,10 +84,21 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
     }
   }
 
-  void _confirmAdd() {
+  Future<void> _confirmAdd() async {
     if (_scannedProduct != null) {
-      widget.onProductFound(_scannedProduct!, _codeController.text.trim());
-      Navigator.of(context).pop();
+      final code = _codeController.text.trim();
+      int finalQty = 1;
+      if (_scannedProduct!.stock > 1) {
+        final chosenQty = await StockQtyConfirmDialog.show(
+          context,
+          product: _scannedProduct!,
+          qrcode: code,
+        );
+        if (chosenQty == null) return;
+        finalQty = chosenQty;
+      }
+      widget.onProductFound(_scannedProduct!, code, finalQty);
+      if (mounted) Navigator.of(context).pop();
     }
   }
 

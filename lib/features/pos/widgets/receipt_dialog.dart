@@ -5,13 +5,75 @@ import '../../../core/constants/app_text_styles.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/utils/currency_formatter.dart';
 
-class ReceiptDialog extends StatelessWidget {
+import '../../../core/routes/app_routes.dart';
+import '../../../core/services/printer_service.dart';
+
+class ReceiptDialog extends StatefulWidget {
   final InvoiceModel invoice;
 
   const ReceiptDialog({super.key, required this.invoice});
 
   @override
+  State<ReceiptDialog> createState() => _ReceiptDialogState();
+}
+
+class _ReceiptDialogState extends State<ReceiptDialog> {
+  bool _isPrinting = false;
+
+  Future<void> _handlePrint() async {
+    final printerService = PrinterService.instance;
+    final isConnected = await printerService.checkConnectionStatus();
+
+    if (!isConnected && printerService.connectedDevice == null) {
+      if (!mounted) return;
+      final openSettings = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.print_disabled_rounded, color: AppColors.warning),
+              SizedBox(width: 8),
+              Text('Printer Belum Terhubung'),
+            ],
+          ),
+          content: const Text(
+            'Printer thermal Bluetooth belum dikonfigurasi. Apakah Anda ingin membuka menu Pengaturan Printer sekarang?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Buka Pengaturan'),
+            ),
+          ],
+        ),
+      );
+
+      if (openSettings == true && mounted) {
+        Navigator.of(context).pushNamed(AppRoutes.printerSettings);
+      }
+      return;
+    }
+
+    setState(() => _isPrinting = true);
+    final result = await printerService.printReceipt(widget.invoice);
+    if (!mounted) return;
+    setState(() => _isPrinting = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.success ? AppColors.success : AppColors.error,
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final invoice = widget.invoice;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
       child: Container(
@@ -62,9 +124,31 @@ class ReceiptDialog extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(item.itemName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                               Text(
-                                '${item.qty} x ${CurrencyFormatter.format(item.price)}',
+                                item.itemName,
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                              ),
+                              if (item.qrcode != null && item.qrcode!.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFE8EAF6),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    'QR: ${item.qrcode}',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF283593),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 2),
+                              Text(
+                                '${item.qty} ${item.unit ?? "pcs"} x ${CurrencyFormatter.format(item.price)}',
                                 style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                               ),
                             ],
@@ -81,7 +165,14 @@ class ReceiptDialog extends StatelessWidget {
 
               // Totals
               _buildReceiptRow('Sub Total', CurrencyFormatter.format(invoice.subTotal)),
-              if (invoice.discount > 0) _buildReceiptRow('Diskon', '- ${CurrencyFormatter.format(invoice.discount)}'),
+              if (invoice.discount > 0)
+                _buildReceiptRow(
+                  invoice.promoName != null && invoice.promoName!.isNotEmpty
+                      ? 'Diskon Promo (${invoice.promoName})'
+                      : 'Diskon Promo',
+                  '- ${CurrencyFormatter.format(invoice.discount)}',
+                  color: AppColors.success,
+                ),
               if (invoice.ppn > 0) _buildReceiptRow('PPN', '+ ${CurrencyFormatter.format(invoice.ppn)}'),
               const Divider(),
               _buildReceiptRow('Grand Total', CurrencyFormatter.format(invoice.grandTotal), isBold: true, fontSize: 16),
@@ -94,13 +185,15 @@ class ReceiptDialog extends StatelessWidget {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Mencetak struk ke printer thermal...')),
-                        );
-                      },
-                      icon: const Icon(Icons.print_rounded),
-                      label: const Text('Cetak Struk'),
+                      onPressed: _isPrinting ? null : _handlePrint,
+                      icon: _isPrinting
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.print_rounded),
+                      label: Text(_isPrinting ? 'Mencetak...' : 'Cetak Struk'),
                     ),
                   ),
                   AppSizes.gapW12,

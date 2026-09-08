@@ -86,6 +86,13 @@ class _HomePageState extends State<HomePage> {
         title: const Text(AppConfig.appName),
         actions: [
           IconButton(
+            icon: const Icon(Icons.print_outlined),
+            tooltip: 'Pengaturan Printer Thermal',
+            onPressed: () {
+              Navigator.of(context).pushNamed(AppRoutes.printerSettings);
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Pengaturan API Server',
             onPressed: () async {
@@ -170,7 +177,7 @@ class _HomePageState extends State<HomePage> {
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Text(
-                    'Peran: ${role.toString()} | POS Mobile',
+                    'Peran: $role | POS Mobile',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -210,22 +217,22 @@ class _HomePageState extends State<HomePage> {
         color: AppColors.secondary,
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.invoices),
       ),
-      _MenuItem(
-        title: 'Mutasi Barang',
-        subtitle: 'Riwayat keluar masuk stok item',
-        icon: Icons.inventory_rounded,
-        color: const Color(0xFF00897B),
-        onTap: () =>
-            Navigator.of(context).pushNamed(AppRoutes.itemTransactions),
-      ),
-      _MenuItem(
-        title: 'Lapor Pembayaran',
-        subtitle: 'Konfirmasi bukti bayar masuk',
-        icon: Icons.payment_rounded,
-        color: const Color(0xFFD81B60),
-        onTap: () =>
-            Navigator.of(context).pushNamed(AppRoutes.paymentNotification),
-      ),
+      // _MenuItem(
+      //   title: 'Mutasi Barang',
+      //   subtitle: 'Riwayat keluar masuk stok item',
+      //   icon: Icons.inventory_rounded,
+      //   color: const Color(0xFF00897B),
+      //   onTap: () =>
+      //       Navigator.of(context).pushNamed(AppRoutes.itemTransactions),
+      // ),
+      // _MenuItem(
+      //   title: 'Lapor Pembayaran',
+      //   subtitle: 'Konfirmasi bukti bayar masuk',
+      //   icon: Icons.payment_rounded,
+      //   color: const Color(0xFFD81B60),
+      //   onTap: () =>
+      //       Navigator.of(context).pushNamed(AppRoutes.paymentNotification),
+      // ),
     ];
 
     return GridView.builder(

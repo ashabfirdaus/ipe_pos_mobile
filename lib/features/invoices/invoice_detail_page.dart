@@ -3,7 +3,9 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/constants/app_text_styles.dart';
 import '../../core/models/pos_models.dart';
+import '../../core/routes/app_routes.dart';
 import '../../core/services/api_service.dart';
+import '../../core/services/printer_service.dart';
 import '../../core/utils/currency_formatter.dart';
 
 class InvoiceDetailPage extends StatefulWidget {
@@ -17,8 +19,61 @@ class InvoiceDetailPage extends StatefulWidget {
 
 class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   bool _isLoading = true;
+  bool _isPrinting = false;
   InvoiceModel? _invoice;
   String? _errorMessage;
+
+  Future<void> _handlePrint() async {
+    if (_invoice == null) return;
+    final printerService = PrinterService.instance;
+    final isConnected = await printerService.checkConnectionStatus();
+
+    if (!isConnected && printerService.connectedDevice == null) {
+      if (!mounted) return;
+      final openSettings = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.print_disabled_rounded, color: AppColors.warning),
+              SizedBox(width: 8),
+              Text('Printer Belum Terhubung'),
+            ],
+          ),
+          content: const Text(
+            'Printer thermal Bluetooth belum dikonfigurasi. Apakah Anda ingin membuka menu Pengaturan Printer sekarang?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Buka Pengaturan'),
+            ),
+          ],
+        ),
+      );
+
+      if (openSettings == true && mounted) {
+        Navigator.of(context).pushNamed(AppRoutes.printerSettings);
+      }
+      return;
+    }
+
+    setState(() => _isPrinting = true);
+    final result = await printerService.printReceipt(_invoice!);
+    if (!mounted) return;
+    setState(() => _isPrinting = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(result.message),
+        backgroundColor: result.success ? AppColors.success : AppColors.error,
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -141,6 +196,18 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       appBar: AppBar(
         title: Text(_invoice != null ? _invoice!.invoiceNo : 'Detail Invoice'),
         actions: [
+          if (_invoice != null)
+            IconButton(
+              icon: _isPrinting
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : const Icon(Icons.print_rounded),
+              tooltip: 'Cetak Nota',
+              onPressed: _isPrinting ? null : _handlePrint,
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadDetail,
@@ -187,6 +254,27 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                           // Financial Breakdown Card
                           _buildFinancialCard(),
                           AppSizes.gapH24,
+
+                          // Print Receipt Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                              ),
+                              icon: _isPrinting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.print_rounded),
+                              label: Text(_isPrinting ? 'Mencetak Nota...' : 'Cetak Nota ke Printer'),
+                              onPressed: _isPrinting ? null : _handlePrint,
+                            ),
+                          ),
+                          AppSizes.gapH12,
 
                           // Void Button if Active
                           if (_invoice!.status == 1)
@@ -299,14 +387,34 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                   final item = _invoice!.items[index];
                   return Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(item.itemName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            if (item.qrcode != null && item.qrcode!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFE8EAF6),
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  'QR: ${item.qrcode}',
+                                  style: const TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF283593),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 2),
                             Text(
-                              '${item.qty} x ${CurrencyFormatter.format(item.price)}',
+                              '${item.qty} ${item.unit ?? "pcs"} x ${CurrencyFormatter.format(item.price)}',
                               style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                             ),
                           ],
@@ -335,7 +443,13 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
             _buildRow('Sub Total', CurrencyFormatter.format(_invoice!.subTotal)),
             if (_invoice!.discount > 0) ...[
               AppSizes.gapH4,
-              _buildRow('Diskon', '- ${CurrencyFormatter.format(_invoice!.discount)}', color: AppColors.success),
+              _buildRow(
+                _invoice!.promoName != null && _invoice!.promoName!.isNotEmpty
+                    ? 'Diskon Promo (${_invoice!.promoName})'
+                    : 'Diskon Promo',
+                '- ${CurrencyFormatter.format(_invoice!.discount)}',
+                color: AppColors.success,
+              ),
             ],
             if (_invoice!.ppn > 0) ...[
               AppSizes.gapH4,

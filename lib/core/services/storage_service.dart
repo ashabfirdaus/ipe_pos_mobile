@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
@@ -17,29 +18,14 @@ class StorageService {
   static Future<void> init() async {
     try {
       _prefs = await SharedPreferences.getInstance();
-      final savedBaseUrl = _prefs?.getString(keyCustomBaseUrl);
-      if (savedBaseUrl != null && savedBaseUrl.trim().isNotEmpty) {
-        ApiConfig.baseUrl = savedBaseUrl.trim();
-      }
     } catch (e) {
       debugPrint('[StorageService] Peringatan: $e');
     }
   }
 
-  // --- Base URL Config ---
-  static Future<bool> saveBaseUrl(String url) async {
-    ApiConfig.baseUrl = url.trim();
-    _memoryFallback[keyCustomBaseUrl] = url.trim();
-    try {
-      _prefs ??= await SharedPreferences.getInstance();
-      return (await _prefs?.setString(keyCustomBaseUrl, url.trim())) ?? true;
-    } catch (_) {
-      return true;
-    }
-  }
-
+  // --- Base URL Config (Directly from ApiConfig) ---
   static String getBaseUrl() {
-    return _prefs?.getString(keyCustomBaseUrl) ?? ApiConfig.baseUrl;
+    return ApiConfig.baseUrl;
   }
 
   // --- Auth Token Management ---
@@ -94,6 +80,20 @@ class StorageService {
     } catch (_) {
       return _memoryFallback[AppConfig.keyUserData] as String?;
     }
+  }
+
+  /// Ambil nama kasir / user yang sedang login
+  static Future<String?> getCashierName() async {
+    final cached = await getUserData();
+    if (cached != null) {
+      try {
+        final json = jsonDecode(cached);
+        if (json is Map<String, dynamic>) {
+          return json['name']?.toString() ?? json['username']?.toString();
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 
   // --- POS Branch & Warehouse Selection Cache ---

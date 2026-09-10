@@ -1,11 +1,9 @@
 class ApiConfig {
   ApiConfig._();
 
-  // Default Dev Base URL requested by user
-  static const String defaultBaseUrl = 'http://192.168.110.132:8080/api';
-
-  // Active Base URL (can be customized via settings or loaded from local storage)
-  static String baseUrl = defaultBaseUrl;
+  // Single source of truth for Base API URL
+  static const String baseUrl = 'http://192.168.110.132:8080/api';
+  static const String defaultBaseUrl = baseUrl;
 
   // Connection Timeouts
   static const Duration connectTimeout = Duration(seconds: 20);

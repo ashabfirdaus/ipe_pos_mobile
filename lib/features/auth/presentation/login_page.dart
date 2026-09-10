@@ -85,77 +85,61 @@ class _LoginPageState extends State<LoginPage> {
 
     return Scaffold(
       body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSizes.lg,
-                  vertical: AppSizes.md,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Header Logo & App Info
-                    _buildHeader(),
-                    AppSizes.gapH24,
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSizes.lg,
+              vertical: AppSizes.md,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Header Logo & App Info
+                _buildHeader(),
+                AppSizes.gapH24,
 
-                    if (_errorMessage != null) ...[
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(AppSizes.sm),
-                        decoration: BoxDecoration(
-                          color: AppColors.error.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(
-                            AppSizes.radiusSm,
-                          ),
-                          border: Border.all(
-                            color: AppColors.error.withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.error_outline,
-                              color: AppColors.error,
-                              size: 20,
-                            ),
-                            AppSizes.gapW8,
-                            Expanded(
-                              child: Text(
-                                _errorMessage!,
-                                style: const TextStyle(
-                                  color: AppColors.error,
-                                  fontSize: 13,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                if (_errorMessage != null) ...[
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSizes.sm),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(
+                        AppSizes.radiusSm,
                       ),
-                      AppSizes.gapH16,
-                    ],
+                      border: Border.all(
+                        color: AppColors.error.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.error,
+                          size: 20,
+                        ),
+                        AppSizes.gapW8,
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: const TextStyle(
+                              color: AppColors.error,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  AppSizes.gapH16,
+                ],
 
-                    // Login Form Card
-                    _buildLoginForm(),
-                    SizedBox(height: bottomInset > 0 ? bottomInset : 0),
-                  ],
-                ),
-              ),
+                // Login Form Card
+                _buildLoginForm(),
+                SizedBox(height: bottomInset > 0 ? bottomInset : 0),
+              ],
             ),
-            Positioned(
-              top: AppSizes.xs,
-              right: AppSizes.xs,
-              child: IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                tooltip: 'Pengaturan Server',
-                onPressed: () async {
-                  await Navigator.of(context).pushNamed(AppRoutes.settings);
-                  if (mounted) setState(() {});
-                },
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

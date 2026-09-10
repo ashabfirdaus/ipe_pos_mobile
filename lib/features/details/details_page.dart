@@ -19,7 +19,9 @@ class DetailsPage extends StatelessWidget {
       appBar: AppBar(
         title: Text(title),
       ),
-      body: SingleChildScrollView(
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
         padding: AppSizes.paddingPage,
         child: Card(
           child: Padding(
@@ -72,6 +74,7 @@ class DetailsPage extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 }

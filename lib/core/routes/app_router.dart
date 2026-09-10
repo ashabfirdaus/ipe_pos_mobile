@@ -9,7 +9,6 @@ import '../../features/invoices/invoice_history_page.dart';
 import '../../features/invoices/invoice_detail_page.dart';
 import '../../features/item_transactions/item_transactions_page.dart';
 import '../../features/payment_notification/payment_notification_page.dart';
-import '../../features/settings/api_settings_page.dart';
 import '../../features/settings/printer_settings_page.dart';
 import '../../features/details/details_page.dart';
 
@@ -83,12 +82,6 @@ class AppRouter {
       case AppRoutes.paymentNotification:
         return _buildPageRoute(
           const PaymentNotificationPage(),
-          settings: settings,
-        );
-
-      case AppRoutes.settings:
-        return _buildPageRoute(
-          const ApiSettingsPage(),
           settings: settings,
         );
 
@@ -196,30 +189,33 @@ class _NotFoundPage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Halaman Tidak Ditemukan'),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                size: 72,
-                color: Colors.redAccent,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Rute "$routeName" tidak ditemukan!',
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.arrow_back),
-                label: const Text('Kembali'),
-              ),
-            ],
+      body: SafeArea(
+        top: false,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 72,
+                  color: Colors.redAccent,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Rute "$routeName" tidak ditemukan!',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: const Text('Kembali'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

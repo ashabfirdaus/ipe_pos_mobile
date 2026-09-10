@@ -86,87 +86,90 @@ class _PaymentNotificationPageState extends State<PaymentNotificationPage> {
       appBar: AppBar(
         title: const Text('Lapor Notifikasi Pembayaran'),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSizes.md),
-        child: Form(
-          key: _formKey,
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSizes.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Formulir Laporan Pembayaran', style: AppTextStyles.h3),
-                  AppSizes.gapH8,
-                  const Text(
-                    'Simpan bukti dan notifikasi konfirmasi pembayaran masuk dari pelanggan.',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                  AppSizes.gapH20,
-
-                  // Payment Method
-                  DropdownButtonFormField<String>(
-                    initialValue: _selectedMethod,
-                    decoration: const InputDecoration(
-                      labelText: 'Metode Pembayaran',
-                      prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSizes.md),
+          child: Form(
+            key: _formKey,
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSizes.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Formulir Laporan Pembayaran', style: AppTextStyles.h3),
+                    AppSizes.gapH8,
+                    const Text(
+                      'Simpan bukti dan notifikasi konfirmasi pembayaran masuk dari pelanggan.',
+                      style: AppTextStyles.bodySmall,
                     ),
-                    items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => _selectedMethod = val);
-                    },
-                  ),
-                  AppSizes.gapH16,
+                    AppSizes.gapH20,
 
-                  // Nominal
-                  TextFormField(
-                    controller: _nominalController,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Nominal Pembayaran (Rp)',
-                      prefixIcon: Icon(Icons.monetization_on_outlined),
-                      prefixText: 'Rp ',
+                    // Payment Method
+                    DropdownButtonFormField<String>(
+                      initialValue: _selectedMethod,
+                      decoration: const InputDecoration(
+                        labelText: 'Metode Pembayaran',
+                        prefixIcon: Icon(Icons.account_balance_wallet_outlined),
+                      ),
+                      items: _methods.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedMethod = val);
+                      },
                     ),
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'Nominal wajib diisi';
-                      return null;
-                    },
-                  ),
-                  AppSizes.gapH16,
+                    AppSizes.gapH16,
 
-                  // Description / Ref
-                  TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'Keterangan / No Referensi Transaksi',
-                      hintText: 'contoh: Pembayaran invoice pelanggan INV-2026-001',
-                      prefixIcon: Icon(Icons.notes_rounded),
+                    // Nominal
+                    TextFormField(
+                      controller: _nominalController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Nominal Pembayaran (Rp)',
+                        prefixIcon: Icon(Icons.monetization_on_outlined),
+                        prefixText: 'Rp ',
+                      ),
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) return 'Nominal wajib diisi';
+                        return null;
+                      },
                     ),
-                    maxLines: 3,
-                    validator: (val) {
-                      if (val == null || val.trim().isEmpty) return 'Keterangan wajib diisi';
-                      return null;
-                    },
-                  ),
-                  AppSizes.gapH24,
+                    AppSizes.gapH16,
 
-                  // Submit Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: _isLoading ? null : _handleSubmit,
-                      icon: _isLoading ? null : const Icon(Icons.send_rounded),
-                      label: _isLoading
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                            )
-                          : const Text('Kirim Notifikasi Pembayaran'),
+                    // Description / Ref
+                    TextFormField(
+                      controller: _descriptionController,
+                      decoration: const InputDecoration(
+                        labelText: 'Keterangan / No Referensi Transaksi',
+                        hintText: 'contoh: Pembayaran invoice pelanggan INV-2026-001',
+                        prefixIcon: Icon(Icons.notes_rounded),
+                      ),
+                      maxLines: 3,
+                      validator: (val) {
+                        if (val == null || val.trim().isEmpty) return 'Keterangan wajib diisi';
+                        return null;
+                      },
                     ),
-                  ),
-                ],
+                    AppSizes.gapH24,
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _handleSubmit,
+                        icon: _isLoading ? null : const Icon(Icons.send_rounded),
+                        label: _isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                              )
+                            : const Text('Kirim Notifikasi Pembayaran'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

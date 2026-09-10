@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import '../constants/app_colors.dart';
 import '../models/api_response.dart';
 import '../models/pos_models.dart';
+import '../routes/app_router.dart';
+import '../routes/app_routes.dart';
 import 'storage_service.dart';
 
 class ApiService {
@@ -66,7 +69,7 @@ class ApiService {
           .get(uri, headers: headers)
           .timeout(ApiConfig.connectTimeout);
 
-      return _processResponse(response);
+      return _processResponse(response, requiresAuth: requiresAuth);
     } on SocketException catch (e) {
       debugPrint('[ApiService Error] SocketException: $e');
       return ApiResponse.error(
@@ -103,7 +106,7 @@ class ApiService {
           .post(uri, headers: headers, body: encodedBody)
           .timeout(ApiConfig.connectTimeout);
 
-      return _processResponse(response);
+      return _processResponse(response, requiresAuth: requiresAuth);
     } on SocketException catch (e) {
       debugPrint('[ApiService Error] SocketException: $e');
       return ApiResponse.error(
@@ -124,8 +127,47 @@ class ApiService {
     }
   }
 
+  static bool _isLoggingOut = false;
+
+  /// Trigger immediate logout on unauthenticated response
+  static void handleUnauthenticated() {
+    if (_isLoggingOut) return;
+    _isLoggingOut = true;
+
+    Future.microtask(() async {
+      try {
+        await StorageService.clearAuth();
+
+        final navState = AppRouter.navigatorKey.currentState;
+        if (navState != null) {
+          navState.pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+
+          final context = AppRouter.navigatorKey.currentContext;
+          if (context != null && context.mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Sesi Anda telah berakhir. Silakan masuk kembali.'),
+                backgroundColor: AppColors.error,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint('[ApiService] Gagal auto-logout: $e');
+      } finally {
+        await Future.delayed(const Duration(seconds: 1));
+        _isLoggingOut = false;
+      }
+    });
+  }
+
   /// Response processor parser
-  static ApiResponse<dynamic> _processResponse(http.Response response) {
+  static ApiResponse<dynamic> _processResponse(
+    http.Response response, {
+    bool requiresAuth = true,
+  }) {
     debugPrint('[ApiService Response ${response.statusCode}] ${response.body}');
     dynamic json;
     try {
@@ -135,6 +177,23 @@ class ApiService {
     }
 
     final isSuccessStatus = response.statusCode >= 200 && response.statusCode < 300;
+
+    // Deteksi jika server mengembalikan 401 atau pesan Unauthenticated
+    final isUnauthenticated = response.statusCode == 401 ||
+        (json is Map && (
+          json['message']?.toString().toLowerCase().contains('unauthenticated') == true ||
+          json['status']?.toString().toLowerCase() == 'unauthenticated' ||
+          json['error']?.toString().toLowerCase().contains('unauthenticated') == true
+        ));
+
+    if (requiresAuth && isUnauthenticated) {
+      debugPrint('[ApiService] Respon Unauthenticated terdeteksi! Langsung logout...');
+      handleUnauthenticated();
+      return ApiResponse.error(
+        message: 'Sesi telah berakhir (Unauthenticated). Silakan masuk kembali.',
+        statusCode: 401,
+      );
+    }
 
     if (json is Map<String, dynamic>) {
       final status = json['status']?.toString() ?? (isSuccessStatus ? 'success' : 'error');
@@ -420,7 +479,13 @@ class ApiService {
   static Future<ApiResponse<InvoiceModel>> getInvoiceDetail(dynamic invoiceId) async {
     final res = await get(ApiConfig.posInvoiceDetail(invoiceId));
     if (res.isSuccess && res.data is Map<String, dynamic>) {
-      final invoice = InvoiceModel.fromJson(res.data as Map<String, dynamic>);
+      final map = res.data as Map<String, dynamic>;
+      final invoiceData = (map['invoice'] is Map<String, dynamic>)
+          ? map['invoice'] as Map<String, dynamic>
+          : ((map['data'] is Map<String, dynamic>)
+              ? map['data'] as Map<String, dynamic>
+              : map);
+      final invoice = InvoiceModel.fromJson(invoiceData);
       return ApiResponse.success(data: invoice, message: res.message);
     }
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);

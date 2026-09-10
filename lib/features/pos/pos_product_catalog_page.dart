@@ -64,7 +64,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(res.message.isNotEmpty ? res.message : 'Gagal memuat produk'),
+          content: Text(
+            res.message.isNotEmpty ? res.message : 'Gagal memuat produk',
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -93,7 +95,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       if (isDuplicate) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('QR Code stok "$qrcode" sudah ada di dalam keranjang!'),
+            content: Text(
+              'QR Code stok "$qrcode" sudah ada di dalam keranjang!',
+            ),
             backgroundColor: AppColors.warning,
           ),
         );
@@ -101,12 +105,14 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       }
 
       setState(() {
-        widget.cartItems.add(CartItemModel(
-          product: product,
-          qty: qty,
-          price: product.price,
-          qrcode: qrcode,
-        ));
+        widget.cartItems.add(
+          CartItemModel(
+            product: product,
+            qty: qty,
+            price: product.price,
+            qrcode: qrcode,
+          ),
+        );
       });
       widget.onCartUpdated();
     } else {
@@ -132,12 +138,14 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         }
       } else {
         setState(() {
-          widget.cartItems.add(CartItemModel(
-            product: product,
-            qty: qty,
-            price: product.price,
-            qrcode: '',
-          ));
+          widget.cartItems.add(
+            CartItemModel(
+              product: product,
+              qty: qty,
+              price: product.price,
+              qrcode: '',
+            ),
+          );
         });
         widget.onCartUpdated();
       }
@@ -165,8 +173,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
   }
 
   void _removeFromCart(ProductModel product) {
-    final existingIndex =
-        widget.cartItems.indexWhere((item) => item.product.id == product.id);
+    final existingIndex = widget.cartItems.indexWhere(
+      (item) => item.product.id == product.id,
+    );
     if (existingIndex >= 0) {
       setState(() {
         if (widget.cartItems[existingIndex].qty > 1) {
@@ -216,9 +225,11 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(res.message.isNotEmpty
-                ? res.message
-                : 'Produk "$scannedCode" tidak ditemukan.'),
+            content: Text(
+              res.message.isNotEmpty
+                  ? res.message
+                  : 'Produk "$scannedCode" tidak ditemukan.',
+            ),
             backgroundColor: AppColors.error,
           ),
         );
@@ -226,6 +237,7 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     }
   }
 
+  // ignore: unused_element
   void _openScanQrDialog() {
     showDialog(
       context: context,
@@ -251,16 +263,16 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       appBar: AppBar(
         title: const Text('Katalog Produk POS'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.camera_alt_rounded),
-            tooltip: 'Kamera Scanner Barcode',
-            onPressed: _openDirectCameraScanner,
-          ),
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            tooltip: 'Input / Scan Kode',
-            onPressed: _openScanQrDialog,
-          ),
+          // IconButton(
+          //   icon: const Icon(Icons.camera_alt_rounded),
+          //   tooltip: 'Kamera Scanner Barcode',
+          //   onPressed: _openDirectCameraScanner,
+          // ),
+          // IconButton(
+          //   icon: const Icon(Icons.qr_code_scanner_rounded),
+          //   tooltip: 'Input / Scan Kode',
+          //   onPressed: _openScanQrDialog,
+          // ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Muat Ulang',
@@ -269,62 +281,67 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Search Bar
-          Padding(
-            padding: const EdgeInsets.all(AppSizes.md),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Cari nama produk / kode / barcode...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          _loadProducts();
-                        },
-                      )
-                    : null,
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              ),
-              onSubmitted: (val) => _loadProducts(search: val.trim()),
-            ),
-          ),
-
-          // Products List
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _products.isEmpty
-                    ? _buildEmptyState()
-                    : RefreshIndicator(
-                        onRefresh: () => _loadProducts(
-                            search: _searchController.text.trim()),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(
-                            AppSizes.md,
-                            0,
-                            AppSizes.md,
-                            AppSizes.md,
-                          ),
-                          itemCount: _products.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: 10),
-                          itemBuilder: (context, index) {
-                            final product = _products[index];
-                            final qtyInCart = _getQtyInCart(product.id);
-                            return _buildProductCard(product, qtyInCart);
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            // Search Bar
+            Padding(
+              padding: const EdgeInsets.all(AppSizes.md),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Cari nama produk / kode / barcode...',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            _loadProducts();
                           },
-                        ),
-                      ),
-          ),
+                        )
+                      : null,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+                onSubmitted: (val) => _loadProducts(search: val.trim()),
+              ),
+            ),
 
-          // Sticky Bottom Cart Bar
-          if (widget.cartItems.isNotEmpty) _buildBottomBar(),
-        ],
+            // Products List
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _products.isEmpty
+                  ? _buildEmptyState()
+                  : RefreshIndicator(
+                      onRefresh: () =>
+                          _loadProducts(search: _searchController.text.trim()),
+                      child: ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSizes.md,
+                          0,
+                          AppSizes.md,
+                          AppSizes.md,
+                        ),
+                        itemCount: _products.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        itemBuilder: (context, index) {
+                          final product = _products[index];
+                          final qtyInCart = _getQtyInCart(product.id);
+                          return _buildProductCard(product, qtyInCart);
+                        },
+                      ),
+                    ),
+            ),
+
+            // Sticky Bottom Cart Bar
+            if (widget.cartItems.isNotEmpty) _buildBottomBar(),
+          ],
+        ),
       ),
     );
   }
@@ -336,13 +353,13 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined,
-                size: 64, color: Colors.grey.shade400),
-            AppSizes.gapH16,
-            const Text(
-              'Tidak ada produk ditemukan',
-              style: AppTextStyles.h3,
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 64,
+              color: Colors.grey.shade400,
             ),
+            AppSizes.gapH16,
+            const Text('Tidak ada produk ditemukan', style: AppTextStyles.h3),
             AppSizes.gapH8,
             const Text(
               'Pastikan filter pencarian sesuai atau produk sudah tersedia di gudang yang dipilih.',
@@ -419,7 +436,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                       // Stock Badge
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: isOutOfStock
                               ? AppColors.error.withValues(alpha: 0.1)
@@ -483,7 +502,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                     IconButton(
                       icon: const Icon(Icons.remove, size: 18),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
                       onPressed: () => _removeFromCart(product),
                     ),
                     Container(
@@ -499,7 +521,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                     IconButton(
                       icon: const Icon(Icons.add, size: 18),
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
                       onPressed: isOutOfStock || qtyInCart >= product.stock
                           ? null
                           : () => _addToCart(product),
@@ -511,7 +536,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
               ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                   ),
@@ -528,7 +556,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
 
   Widget _buildBottomBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSizes.md,
+        vertical: 12,
+      ),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
@@ -551,8 +582,11 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.shopping_cart_rounded,
-                          size: 16, color: AppColors.primary),
+                      const Icon(
+                        Icons.shopping_cart_rounded,
+                        size: 16,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         '$_totalCartCount Produk Terpilih',
@@ -582,7 +616,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 12,
+                ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                 ),

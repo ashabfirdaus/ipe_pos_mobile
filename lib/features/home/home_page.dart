@@ -93,38 +93,33 @@ class _HomePageState extends State<HomePage> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: 'Pengaturan API Server',
-            onPressed: () async {
-              await Navigator.of(context).pushNamed(AppRoutes.settings);
-              setState(() {});
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.logout_rounded),
             tooltip: 'Keluar (Logout)',
             onPressed: _handleLogout,
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadUserSession,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppSizes.paddingPage,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User Greeting Card
-              _buildGreetingCard(),
-              AppSizes.gapH20,
+      body: SafeArea(
+        top: false,
+        child: RefreshIndicator(
+          onRefresh: _loadUserSession,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppSizes.paddingPage,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // User Greeting Card
+                _buildGreetingCard(),
+                AppSizes.gapH20,
 
-              // Quick Actions Grid (Main POS modules)
-              const Text('Menu Utama Kasir POS', style: AppTextStyles.h3),
-              AppSizes.gapH12,
-              _buildMenuGrid(),
-              AppSizes.gapH24,
-            ],
+                // Quick Actions Grid (Main POS modules)
+                const Text('Menu Utama Kasir POS', style: AppTextStyles.h3),
+                AppSizes.gapH12,
+                _buildMenuGrid(),
+                AppSizes.gapH24,
+              ],
+            ),
           ),
         ),
       ),
@@ -133,7 +128,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildGreetingCard() {
     final name = _currentUser?.name ?? 'Kasir / Staf POS';
-    final role = _currentUser?.role ?? 'Kasir';
+    final role = _currentUser?.roleName ?? 'Kasir';
 
     return Container(
       width: double.infinity,

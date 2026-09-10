@@ -4,6 +4,7 @@ import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../core/models/pos_models.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/storage_service.dart';
 import '../../../core/utils/currency_formatter.dart';
 import 'receipt_dialog.dart';
 
@@ -122,6 +123,8 @@ class _CartSheetState extends State<CartSheet> {
       _isProcessing = true;
     });
 
+    final itemsPayload = widget.cartItems.map((item) => item.toInvoiceItemJson()).toList();
+
     final payload = <String, dynamic>{
       if (widget.branchId != null) 'branch_id': widget.branchId,
       if (widget.warehouseId != null) 'warehouse_id': widget.warehouseId,
@@ -132,8 +135,9 @@ class _CartSheetState extends State<CartSheet> {
       'grand_total': grandTotal,
       'cash': cash,
       'change': _calculateChange(),
-      'promo_id': _selectedPromo?.id,
-      'items': widget.cartItems.map((item) => item.toInvoiceItemJson()).toList(),
+      if (_selectedPromo != null) 'promo_id': _selectedPromo!.id,
+      'items': itemsPayload,
+      'details': itemsPayload,
     };
 
     final res = await ApiService.saveInvoice(payload);
@@ -145,6 +149,40 @@ class _CartSheetState extends State<CartSheet> {
     });
 
     if (res.isSuccess && res.data != null) {
+      var invoice = res.data!;
+      if (invoice.createdAt.isEmpty) {
+        invoice = invoice.copyWith(createdAt: DateTime.now().toIso8601String());
+      }
+      if (invoice.items.isEmpty && widget.cartItems.isNotEmpty) {
+        invoice = invoice.copyWith(
+          items: widget.cartItems
+              .map(
+                (item) => InvoiceItemModel(
+                  itemId: item.product.itemId,
+                  itemName: item.product.name,
+                  qty: item.qty,
+                  price: item.price,
+                  discount: item.discount,
+                  subTotal: item.subTotal,
+                  qrcode: item.qrcode.isNotEmpty ? item.qrcode : null,
+                  unit: item.product.unit,
+                  itemCode: item.product.code,
+                ),
+              )
+              .toList(),
+        );
+      }
+      if (invoice.cashierName == null ||
+          invoice.cashierName!.trim().isEmpty ||
+          invoice.cashierName == '-') {
+        final cashier = await StorageService.getCashierName();
+        if (cashier != null && cashier.isNotEmpty) {
+          invoice = invoice.copyWith(cashierName: cashier);
+        }
+      }
+
+      if (!mounted) return;
+
       Navigator.of(context).pop(); // Tutup cart sheet
       widget.onCartCleared();
 
@@ -152,7 +190,7 @@ class _CartSheetState extends State<CartSheet> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => ReceiptDialog(invoice: res.data!),
+        builder: (ctx) => ReceiptDialog(invoice: invoice),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -312,9 +350,11 @@ class _CartSheetState extends State<CartSheet> {
               color: Colors.grey.shade50,
               border: Border(top: BorderSide(color: Colors.grey.shade200)),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 // Promo Selector
                 if (widget.promos.isNotEmpty) ...[
                   Row(
@@ -457,10 +497,11 @@ class _CartSheetState extends State<CartSheet> {
               ],
             ),
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildSummaryRow(String title, String value, {bool isBold = false, Color? color, double fontSize = 13}) {
     return Padding(

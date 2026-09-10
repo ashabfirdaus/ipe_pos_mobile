@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'core/config/app_config.dart';
 import 'core/routes/app_router.dart';
 import 'core/routes/app_routes.dart';
@@ -8,6 +9,7 @@ import 'core/services/printer_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('id_ID', null);
   await StorageService.init();
   await PrinterService.instance.init();
   runApp(const MyApp());

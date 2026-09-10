@@ -15,13 +15,43 @@ class UserModel {
     this.role,
   });
 
+  String get roleName => _extractRoleName(role);
+
+  static String _extractRoleName(dynamic rawRole) {
+    if (rawRole == null) return 'Kasir';
+    if (rawRole is Map) {
+      return rawRole['role_name']?.toString() ??
+          rawRole['name']?.toString() ??
+          rawRole['title']?.toString() ??
+          rawRole['display_name']?.toString() ??
+          'Kasir';
+    }
+    if (rawRole is List && rawRole.isNotEmpty) {
+      return _extractRoleName(rawRole.first);
+    }
+    final r = rawRole.toString().trim();
+    if (r.isEmpty || r == 'null') return 'Kasir';
+    if (r.startsWith('{')) {
+      final match = RegExp(r'role_name["\s:]+([^",}\]]+)').firstMatch(r) ??
+          RegExp(r'name["\s:]+([^",}\]]+)').firstMatch(r);
+      if (match != null) {
+        final val = match.group(1)?.trim() ?? '';
+        if (val.isNotEmpty && val != 'null') return val;
+      }
+    }
+    return r;
+  }
+
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    final roleValue = json['role_name'] ?? json['role'] ?? json['roles'];
+    final parsedRole = _extractRoleName(roleValue);
+
     return UserModel(
       id: json['id'],
       name: json['name']?.toString() ?? json['username']?.toString() ?? 'Kasir',
       username: json['username']?.toString() ?? '',
       email: json['email']?.toString(),
-      role: json['role']?.toString() ?? json['role_name']?.toString() ?? 'Kasir',
+      role: parsedRole,
     );
   }
 
@@ -30,7 +60,8 @@ class UserModel {
     'name': name,
     'username': username,
     'email': email,
-    'role': role,
+    'role': roleName,
+    'role_name': roleName,
   };
 }
 
@@ -309,11 +340,14 @@ class CartItemModel {
 
   Map<String, dynamic> toInvoiceItemJson() => {
     'item_id': product.itemId,
+    'item_name': product.name,
     'qty': qty,
     'price': price,
     'discount': discount,
     'sub_total': subTotal,
-    'qrcode': qrcode,
+    'qrcode': qrcode.isNotEmpty ? qrcode : null,
+    if (product.unit != null) 'unit': product.unit,
+    if (product.code != null) 'code': product.code,
   };
 }
 
@@ -341,16 +375,29 @@ class InvoiceItemModel {
   });
 
   factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
+    final itemObj = json['item'] is Map<String, dynamic> ? json['item'] as Map<String, dynamic> : null;
+    final unitObj = itemObj?['unit'] is Map<String, dynamic>
+        ? itemObj!['unit'] as Map<String, dynamic>
+        : (json['unit'] is Map<String, dynamic> ? json['unit'] as Map<String, dynamic> : null);
+
     return InvoiceItemModel(
-      itemId: json['item_id'] ?? json['id'],
-      itemName: json['item_name']?.toString() ?? json['name']?.toString() ?? 'Item',
-      qty: int.tryParse(json['qty']?.toString() ?? '1') ?? 1,
+      itemId: json['item_id'] ?? itemObj?['id'] ?? json['id'],
+      itemName: json['item_name']?.toString() ??
+          itemObj?['item_name']?.toString() ??
+          json['name']?.toString() ??
+          'Item',
+      qty: (double.tryParse(json['qty']?.toString() ?? '1') ?? 1.0).toInt(),
       price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
       qrcode: json['qrcode']?.toString(),
-      unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'Pcs',
-      itemCode: json['item_code']?.toString() ?? json['code']?.toString(),
+      unit: json['unit_measure_name']?.toString() ??
+          unitObj?['unit_measure_name']?.toString() ??
+          (json['unit'] is String ? json['unit']?.toString() : null) ??
+          'Pcs',
+      itemCode: json['item_code']?.toString() ??
+          itemObj?['item_code']?.toString() ??
+          json['code']?.toString(),
     );
   }
 }
@@ -372,6 +419,7 @@ class InvoiceModel {
   final double change;
   final String? voidDesc;
   final String? voidAt;
+  final String? cashierName;
   final List<InvoiceItemModel> items;
 
   InvoiceModel({
@@ -383,6 +431,7 @@ class InvoiceModel {
     this.warehouseName,
     this.paymentMethodName,
     this.promoName,
+    this.cashierName,
     required this.subTotal,
     required this.discount,
     required this.ppn,
@@ -403,6 +452,7 @@ class InvoiceModel {
     String? warehouseName,
     String? paymentMethodName,
     String? promoName,
+    String? cashierName,
     double? subTotal,
     double? discount,
     double? ppn,
@@ -422,6 +472,7 @@ class InvoiceModel {
       warehouseName: warehouseName ?? this.warehouseName,
       paymentMethodName: paymentMethodName ?? this.paymentMethodName,
       promoName: promoName ?? this.promoName,
+      cashierName: cashierName ?? this.cashierName,
       subTotal: subTotal ?? this.subTotal,
       discount: discount ?? this.discount,
       ppn: ppn ?? this.ppn,
@@ -436,23 +487,60 @@ class InvoiceModel {
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     final itemList = <InvoiceItemModel>[];
-    if (json['items'] is List) {
-      for (final item in json['items']) {
+    final rawItems = json['details'] ?? json['items'] ?? json['group_details'];
+    if (rawItems is List) {
+      for (final item in rawItems) {
         if (item is Map<String, dynamic>) {
           itemList.add(InvoiceItemModel.fromJson(item));
         }
       }
     }
 
+    final branchObj = json['branch'] is Map<String, dynamic> ? json['branch'] as Map<String, dynamic> : null;
+    final warehouseObj = json['warehouse'] is Map<String, dynamic> ? json['warehouse'] as Map<String, dynamic> : null;
+    final pmObj = json['payment_method'] is Map<String, dynamic> ? json['payment_method'] as Map<String, dynamic> : null;
+    final promoObj = json['promo'] is Map<String, dynamic> ? json['promo'] as Map<String, dynamic> : null;
+    final userObj = json['user'] is Map<String, dynamic>
+        ? json['user'] as Map<String, dynamic>
+        : (json['cashier'] is Map<String, dynamic>
+            ? json['cashier'] as Map<String, dynamic>
+            : (json['creator'] is Map<String, dynamic>
+                ? json['creator'] as Map<String, dynamic>
+                : (json['created_by'] is Map<String, dynamic>
+                    ? json['created_by'] as Map<String, dynamic>
+                    : (json['created_by_user'] is Map<String, dynamic>
+                        ? json['created_by_user'] as Map<String, dynamic>
+                        : null))));
+
+    final parsedCashierName = json['cashier_name']?.toString() ??
+        json['user_name']?.toString() ??
+        userObj?['name']?.toString() ??
+        userObj?['username']?.toString() ??
+        userObj?['full_name']?.toString() ??
+        (json['cashier'] is String ? json['cashier']?.toString() : null) ??
+        (json['user'] is String ? json['user']?.toString() : null) ??
+        (json['created_by'] is String ? json['created_by']?.toString() : null) ??
+        json['created_by_name']?.toString();
+
     return InvoiceModel(
       id: json['id'],
-      invoiceNo: json['invoice_no']?.toString() ?? json['invoice_number']?.toString() ?? json['code']?.toString() ?? 'INV-${json['id']}',
+      invoiceNo: json['pos_invoice_code']?.toString() ??
+          json['invoice_no']?.toString() ??
+          json['invoice_number']?.toString() ??
+          json['code']?.toString() ??
+          'INV-${json['id']}',
       createdAt: json['created_at']?.toString() ?? json['date']?.toString() ?? '',
       status: int.tryParse(json['status']?.toString() ?? '1') ?? 1,
-      branchName: json['branch_name']?.toString(),
-      warehouseName: json['warehouse_name']?.toString(),
-      paymentMethodName: json['payment_method_name']?.toString() ?? json['payment_method']?.toString(),
-      promoName: json['promo_name']?.toString() ?? json['promo']?['name']?.toString() ?? json['promo']?.toString(),
+      branchName: json['branch_name']?.toString() ?? branchObj?['branch_name']?.toString(),
+      warehouseName: json['warehouse_name']?.toString() ?? warehouseObj?['warehouse_name']?.toString(),
+      paymentMethodName: json['payment_method_name']?.toString() ??
+          pmObj?['method_name']?.toString() ??
+          (json['payment_method'] is String ? json['payment_method']?.toString() : null),
+      promoName: json['promo_name']?.toString() ??
+          promoObj?['promo_name']?.toString() ??
+          promoObj?['name']?.toString() ??
+          (json['promo'] is String ? json['promo']?.toString() : null),
+      cashierName: parsedCashierName,
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       ppn: double.tryParse(json['ppn']?.toString() ?? json['tax']?.toString() ?? '0') ?? 0.0,
@@ -460,7 +548,7 @@ class InvoiceModel {
       cash: double.tryParse(json['cash']?.toString() ?? '0') ?? 0.0,
       change: double.tryParse(json['change']?.toString() ?? '0') ?? 0.0,
       voidDesc: json['void_desc']?.toString(),
-      voidAt: json['void_at']?.toString(),
+      voidAt: json['void_date']?.toString() ?? json['void_at']?.toString(),
       items: itemList,
     );
   }

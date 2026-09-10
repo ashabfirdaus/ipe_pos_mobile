@@ -1,4 +1,5 @@
 import 'dart:io';
+
 import 'package:esc_pos_utils_plus/esc_pos_utils_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
@@ -9,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/pos_models.dart';
 import '../utils/currency_formatter.dart';
+import 'storage_service.dart';
 
 class PrinterService {
   PrinterService._();
@@ -75,8 +77,10 @@ class PrinterService {
         Permission.bluetoothScan,
       ].request();
 
-      final connectGranted = statuses[Permission.bluetoothConnect]?.isGranted ?? false;
-      final isPluginGranted = await PrintBluetoothThermal.isPermissionBluetoothGranted;
+      final connectGranted =
+          statuses[Permission.bluetoothConnect]?.isGranted ?? false;
+      final isPluginGranted =
+          await PrintBluetoothThermal.isPermissionBluetoothGranted;
 
       // 3. Fallback untuk Android 11 ke bawah atau perangkat OEM khusus
       if (!connectGranted && !isPluginGranted) {
@@ -209,7 +213,9 @@ class PrinterService {
     try {
       img.Image? prepared = is80mm ? _cachedLogo80 : _cachedLogo58;
       if (prepared == null) {
-        final ByteData data = await rootBundle.load('assets/icon/intipangan_logo.png');
+        final ByteData data = await rootBundle.load(
+          'assets/icon/intipangan_logo.png',
+        );
         final Uint8List rawBytes = data.buffer.asUint8List();
         final img.Image? decoded = img.decodeImage(rawBytes);
         if (decoded == null) return [];
@@ -296,32 +302,52 @@ class PrinterService {
       }
       bytes += generator.text(
         'Sistem POS Mobile',
-        styles: const PosStyles(align: PosAlign.center, bold: true, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.text(
         'TES CETAK PRINTER THERMAL',
-        styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.feed(1);
 
       bytes += generator.hr();
       bytes += generator.text(
-        'Waktu: ${DateTime.now().toString().split('.').first}',
-        styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB),
+        'Waktu: ${CurrencyFormatter.formatDateTime(DateTime.now())}',
+        styles: const PosStyles(
+          align: PosAlign.left,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.text(
         'Tipe Kertas: ${_paperSize}mm',
-        styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.left,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.text(
         'Perangkat: ${_connectedDevice?.name ?? "-"}',
-        styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.left,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.hr();
 
       bytes += generator.text(
         'Printer thermal Bluetooth siap digunakan!',
-        styles: const PosStyles(align: PosAlign.center, bold: true, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.feed(2);
       bytes += generator.cut();
@@ -334,10 +360,7 @@ class PrinterService {
             : 'Gagal mencetak, printer tidak merespon.',
       );
     } catch (e) {
-      return (
-        success: false,
-        message: 'Terjadi kesalahan saat mencetak: $e',
-      );
+      return (success: false, message: 'Terjadi kesalahan saat mencetak: $e');
     }
   }
 
@@ -395,19 +418,6 @@ class PrinterService {
         );
       }
 
-      if (invoice.branchName != null && invoice.branchName!.isNotEmpty) {
-        bytes += generator.text(
-          'Cabang: ${invoice.branchName}',
-          styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB),
-        );
-      }
-      if (invoice.warehouseName != null && invoice.warehouseName!.isNotEmpty) {
-        bytes += generator.text(
-          'Gudang: ${invoice.warehouseName}',
-          styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB),
-        );
-      }
-
       bytes += generator.hr();
 
       // 2. Info Transaksi (Font B - Kecil & Ringkas)
@@ -416,16 +426,24 @@ class PrinterService {
         styles: const PosStyles(fontType: PosFontType.fontB),
       );
       bytes += generator.text(
-        'Waktu   : ${CurrencyFormatter.formatDate(invoice.createdAt)}',
+        'Waktu   : ${CurrencyFormatter.formatDate(invoice.createdAt.isNotEmpty ? invoice.createdAt : DateTime.now().toIso8601String())}',
         styles: const PosStyles(fontType: PosFontType.fontB),
       );
-      if (cashierName != null && cashierName.isNotEmpty) {
+      String? effectiveCashier = cashierName;
+      if (effectiveCashier == null || effectiveCashier.trim().isEmpty || effectiveCashier == '-') {
+        effectiveCashier = invoice.cashierName;
+      }
+      if (effectiveCashier == null || effectiveCashier.trim().isEmpty || effectiveCashier == '-') {
+        effectiveCashier = await StorageService.getCashierName();
+      }
+      if (effectiveCashier != null && effectiveCashier.trim().isNotEmpty) {
         bytes += generator.text(
-          'Kasir   : $cashierName',
+          'Kasir   : $effectiveCashier',
           styles: const PosStyles(fontType: PosFontType.fontB),
         );
       }
-      if (invoice.paymentMethodName != null && invoice.paymentMethodName!.isNotEmpty) {
+      if (invoice.paymentMethodName != null &&
+          invoice.paymentMethodName!.isNotEmpty) {
         bytes += generator.text(
           'Metode  : ${invoice.paymentMethodName}',
           styles: const PosStyles(fontType: PosFontType.fontB),
@@ -434,37 +452,60 @@ class PrinterService {
 
       bytes += generator.hr();
 
-      // 3. Daftar Produk (Detail Barang: Nama, QR/SN, Qty x Harga, Subtotal)
+      // 3. Daftar Produk (Detail Barang: Nama, Qty x Harga, Subtotal)
+      // Mengelompokkan item dengan ID & harga sama agar struk rapi
+      final Map<String, InvoiceItemModel> groupedMap = {};
       for (final item in invoice.items) {
+        final key = '${item.itemId}_${item.price}';
+        if (groupedMap.containsKey(key)) {
+          final existing = groupedMap[key]!;
+          groupedMap[key] = InvoiceItemModel(
+            itemId: existing.itemId,
+            itemName: existing.itemName,
+            qty: existing.qty + item.qty,
+            price: existing.price,
+            discount: existing.discount + item.discount,
+            subTotal: existing.subTotal + item.subTotal,
+            unit: existing.unit,
+            itemCode: existing.itemCode,
+          );
+        } else {
+          groupedMap[key] = item;
+        }
+      }
+      final printItems = groupedMap.values.toList();
+
+      for (final item in printItems) {
         // Nama Produk
         bytes += generator.text(
           item.itemName,
-          styles: const PosStyles(bold: true, fontType: PosFontType.fontB),
+          styles: const PosStyles(bold: false, fontType: PosFontType.fontB),
         );
 
-        // Detail QR Code Stok jika ada
-        if (item.qrcode != null && item.qrcode!.isNotEmpty) {
-          bytes += generator.text(
-            '  [QR: ${item.qrcode}]',
-            styles: const PosStyles(fontType: PosFontType.fontB),
-          );
-        }
-
         // Qty x Harga di kiri, Subtotal di kanan
-        final unitStr = item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : '';
-        final qtyStr = '  ${item.qty}$unitStr x ${CurrencyFormatter.format(item.price)}';
+        final unitStr = item.unit != null && item.unit!.isNotEmpty
+            ? ' ${item.unit}'
+            : '';
+        final qtyStr =
+            '  ${item.qty}$unitStr x ${CurrencyFormatter.format(item.price)}';
         final subTotalStr = CurrencyFormatter.format(item.subTotal);
 
         bytes += generator.row([
           PosColumn(
             text: qtyStr,
             width: is80mm ? 8 : 7,
-            styles: const PosStyles(align: PosAlign.left, fontType: PosFontType.fontB),
+            styles: const PosStyles(
+              align: PosAlign.left,
+              fontType: PosFontType.fontB,
+            ),
           ),
           PosColumn(
             text: subTotalStr,
             width: is80mm ? 4 : 5,
-            styles: const PosStyles(align: PosAlign.right, fontType: PosFontType.fontB),
+            styles: const PosStyles(
+              align: PosAlign.right,
+              fontType: PosFontType.fontB,
+            ),
           ),
         ]);
 
@@ -480,28 +521,72 @@ class PrinterService {
       bytes += generator.hr();
 
       // 4. Rekap Finansial (Font B)
-      _addSummaryRow(generator, bytes, 'Sub Total', CurrencyFormatter.format(invoice.subTotal), is80mm);
+      _addSummaryRow(
+        generator,
+        bytes,
+        'Sub Total',
+        CurrencyFormatter.format(invoice.subTotal),
+        is80mm,
+      );
       if (invoice.discount > 0) {
-        final promoLabel = invoice.promoName != null && invoice.promoName!.isNotEmpty
+        final promoLabel =
+            invoice.promoName != null && invoice.promoName!.isNotEmpty
             ? 'Diskon (${invoice.promoName})'
             : 'Diskon Promo';
-        _addSummaryRow(generator, bytes, promoLabel, '-${CurrencyFormatter.format(invoice.discount)}', is80mm, isBold: true);
+        _addSummaryRow(
+          generator,
+          bytes,
+          promoLabel,
+          '-${CurrencyFormatter.format(invoice.discount)}',
+          is80mm,
+          isBold: true,
+        );
       }
       if (invoice.ppn > 0) {
-        _addSummaryRow(generator, bytes, 'PPN', '+${CurrencyFormatter.format(invoice.ppn)}', is80mm);
+        _addSummaryRow(
+          generator,
+          bytes,
+          'PPN',
+          '+${CurrencyFormatter.format(invoice.ppn)}',
+          is80mm,
+        );
       }
 
       bytes += generator.hr();
-      _addSummaryRow(generator, bytes, 'GRAND TOTAL', CurrencyFormatter.format(invoice.grandTotal), is80mm, isBold: true);
-      _addSummaryRow(generator, bytes, 'Tunai (Diterima)', CurrencyFormatter.format(invoice.cash), is80mm);
-      _addSummaryRow(generator, bytes, 'Kembalian', CurrencyFormatter.format(invoice.change), is80mm, isBold: true);
+      _addSummaryRow(
+        generator,
+        bytes,
+        'GRAND TOTAL',
+        CurrencyFormatter.format(invoice.grandTotal),
+        is80mm,
+        isBold: true,
+      );
+      _addSummaryRow(
+        generator,
+        bytes,
+        'Pembayaran (Diterima)',
+        CurrencyFormatter.format(invoice.cash),
+        is80mm,
+      );
+      _addSummaryRow(
+        generator,
+        bytes,
+        'Kembalian',
+        CurrencyFormatter.format(invoice.change),
+        is80mm,
+        isBold: true,
+      );
 
       // Pesan hemat jika mendapatkan promo
       if (invoice.discount > 0) {
         bytes += generator.feed(1);
         bytes += generator.text(
           '* Anda hemat ${CurrencyFormatter.format(invoice.discount)} pada transaksi ini',
-          styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB, bold: true),
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+            bold: true,
+          ),
         );
       }
 
@@ -510,11 +595,18 @@ class PrinterService {
       // 5. Footer (Font B)
       bytes += generator.text(
         'Terima Kasih atas Kunjungan Anda!',
-        styles: const PosStyles(align: PosAlign.center, bold: true, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          bold: true,
+          fontType: PosFontType.fontB,
+        ),
       );
       bytes += generator.text(
         'Barang yang sudah dibeli\ntidak dapat ditukar/dikembalikan',
-        styles: const PosStyles(align: PosAlign.center, fontType: PosFontType.fontB),
+        styles: const PosStyles(
+          align: PosAlign.center,
+          fontType: PosFontType.fontB,
+        ),
       );
 
       bytes += generator.feed(2);
@@ -523,13 +615,12 @@ class PrinterService {
       final printResult = await PrintBluetoothThermal.writeBytes(bytes);
       return (
         success: printResult,
-        message: printResult ? 'Nota berhasil dicetak!' : 'Gagal mengirim data ke printer.',
+        message: printResult
+            ? 'Nota berhasil dicetak!'
+            : 'Gagal mengirim data ke printer.',
       );
     } catch (e) {
-      return (
-        success: false,
-        message: 'Gagal mencetak struk: $e',
-      );
+      return (success: false, message: 'Gagal mencetak struk: $e');
     }
   }
 
@@ -541,17 +632,27 @@ class PrinterService {
     bool is80mm, {
     bool isBold = false,
   }) {
-    bytes.addAll(generator.row([
-      PosColumn(
-        text: label,
-        width: is80mm ? 8 : 7,
-        styles: PosStyles(align: PosAlign.left, bold: isBold, fontType: PosFontType.fontB),
-      ),
-      PosColumn(
-        text: value,
-        width: is80mm ? 4 : 5,
-        styles: PosStyles(align: PosAlign.right, bold: isBold, fontType: PosFontType.fontB),
-      ),
-    ]));
+    bytes.addAll(
+      generator.row([
+        PosColumn(
+          text: label,
+          width: is80mm ? 8 : 7,
+          styles: PosStyles(
+            align: PosAlign.left,
+            bold: isBold,
+            fontType: PosFontType.fontB,
+          ),
+        ),
+        PosColumn(
+          text: value,
+          width: is80mm ? 4 : 5,
+          styles: PosStyles(
+            align: PosAlign.right,
+            bold: isBold,
+            fontType: PosFontType.fontB,
+          ),
+        ),
+      ]),
+    );
   }
 }

@@ -135,60 +135,63 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadState,
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: AppSizes.paddingPage,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 1. Status Koneksi Card
-              _buildStatusCard(isConnected, currentDevice),
-              AppSizes.gapH20,
+      body: SafeArea(
+        top: false,
+        child: RefreshIndicator(
+          onRefresh: _loadState,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: AppSizes.paddingPage,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Status Koneksi Card
+                _buildStatusCard(isConnected, currentDevice),
+                AppSizes.gapH20,
 
-              // 2. Pengaturan Ukuran Kertas
-              _buildPaperSizeCard(currentPaperSize),
-              AppSizes.gapH20,
+                // 2. Pengaturan Ukuran Kertas
+                _buildPaperSizeCard(currentPaperSize),
+                AppSizes.gapH20,
 
-              // 3. Header Daftar Perangkat
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Perangkat Tersambung (Paired)',
-                    style: AppTextStyles.h3,
-                  ),
-                  if (_isLoading)
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                // 3. Header Daftar Perangkat
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Perangkat Tersambung (Paired)',
+                      style: AppTextStyles.h3,
                     ),
+                    if (_isLoading)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                AppSizes.gapH12,
+
+                // 4. Banner Peringatan Izin atau Bluetooth Mati (jika ada)
+                if (!_hasPermission) ...[
+                  _buildPermissionWarning(),
+                  AppSizes.gapH12,
+                ] else if (!_isBluetoothOn && _devices.isEmpty) ...[
+                  _buildBluetoothOffWarning(),
+                  AppSizes.gapH12,
                 ],
-              ),
-              AppSizes.gapH12,
 
-              // 4. Banner Peringatan Izin atau Bluetooth Mati (jika ada)
-              if (!_hasPermission) ...[
-                _buildPermissionWarning(),
-                AppSizes.gapH12,
-              ] else if (!_isBluetoothOn && _devices.isEmpty) ...[
-                _buildBluetoothOffWarning(),
-                AppSizes.gapH12,
+                // 5. Daftar Perangkat Bluetooth
+                if (_devices.isEmpty && !_isLoading)
+                  _buildEmptyDevices()
+                else
+                  _buildDeviceList(currentDevice),
+
+                AppSizes.gapH24,
+
+                // 6. Panduan Singkat
+                _buildHelpCard(),
               ],
-
-              // 5. Daftar Perangkat Bluetooth
-              if (_devices.isEmpty && !_isLoading)
-                _buildEmptyDevices()
-              else
-                _buildDeviceList(currentDevice),
-
-              AppSizes.gapH24,
-
-              // 6. Panduan Singkat
-              _buildHelpCard(),
-            ],
+            ),
           ),
         ),
       ),

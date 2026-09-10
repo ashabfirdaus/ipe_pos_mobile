@@ -80,22 +80,25 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter Bar
-          _buildFilterBar(),
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            // Filter Bar
+            _buildFilterBar(),
 
-          // List Invoices
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _errorMessage != null
-                    ? _buildErrorState()
-                    : _invoices.isEmpty
-                        ? _buildEmptyState()
-                        : _buildInvoiceList(),
-          ),
-        ],
+            // List Invoices
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _errorMessage != null
+                      ? _buildErrorState()
+                      : _invoices.isEmpty
+                          ? _buildEmptyState()
+                          : _buildInvoiceList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -227,8 +230,33 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   AppSizes.gapH4,
-                  Text(CurrencyFormatter.formatDate(inv.createdAt), style: AppTextStyles.caption),
-                  AppSizes.gapH4,
+                  Row(
+                    children: [
+                      const Icon(Icons.access_time, size: 13, color: AppColors.textSecondary),
+                      const SizedBox(width: 4),
+                      Text(CurrencyFormatter.formatDate(inv.createdAt), style: AppTextStyles.caption),
+                    ],
+                  ),
+                  if (inv.cashierName != null && inv.cashierName!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.person_outline_rounded, size: 13, color: AppColors.textSecondary),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Kasir: ${inv.cashierName}',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  AppSizes.gapH6,
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [

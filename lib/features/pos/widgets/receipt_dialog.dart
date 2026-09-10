@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -59,7 +60,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     }
 
     setState(() => _isPrinting = true);
-    final result = await printerService.printReceipt(widget.invoice);
+    final result = await printerService.printReceipt(
+      widget.invoice,
+      cashierName: widget.invoice.cashierName,
+    );
     if (!mounted) return;
     setState(() => _isPrinting = false);
 
@@ -75,7 +79,9 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
   Widget build(BuildContext context) {
     final invoice = widget.invoice;
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusLg)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+      ),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 400),
         padding: const EdgeInsets.all(AppSizes.lg),
@@ -90,81 +96,94 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   color: AppColors.successContainer,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 48),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.success,
+                  size: 48,
+                ),
               ),
               AppSizes.gapH12,
               const Text('Transaksi Berhasil!', style: AppTextStyles.h2),
               Text(
                 'Invoice: ${invoice.invoiceNo}',
-                style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold, color: AppColors.primary),
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
               ),
               AppSizes.gapH16,
               const Divider(),
 
               // Metadata
-              _buildReceiptRow('Tanggal & Waktu', CurrencyFormatter.formatDate(invoice.createdAt)),
-              if (invoice.branchName != null) _buildReceiptRow('Cabang', invoice.branchName!),
-              if (invoice.warehouseName != null) _buildReceiptRow('Gudang', invoice.warehouseName!),
-              if (invoice.paymentMethodName != null) _buildReceiptRow('Metode Bayar', invoice.paymentMethodName!),
+              _buildReceiptRow(
+                'Tanggal & Waktu',
+                CurrencyFormatter.formatDate(invoice.createdAt.isNotEmpty
+                    ? invoice.createdAt
+                    : DateTime.now().toIso8601String()),
+              ),
+              if (invoice.cashierName != null &&
+                  invoice.cashierName!.trim().isNotEmpty)
+                _buildReceiptRow('Kasir', invoice.cashierName!),
+              if (invoice.paymentMethodName != null)
+                _buildReceiptRow('Metode Bayar', invoice.paymentMethodName!),
               const Divider(),
 
               // Items breakdown
               const Align(
                 alignment: Alignment.centerLeft,
-                child: Text('Daftar Produk:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                child: Text(
+                  'Daftar Produk:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ),
               AppSizes.gapH8,
-              ...invoice.items.map((item) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.itemName,
-                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ..._getGroupedItems(invoice.items).map(
+                (item) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.itemName,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
                               ),
-                              if (item.qrcode != null && item.qrcode!.isNotEmpty) ...[
-                                const SizedBox(height: 2),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFE8EAF6),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    'QR: ${item.qrcode}',
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF283593),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 2),
-                              Text(
-                                '${item.qty} ${item.unit ?? "pcs"} x ${CurrencyFormatter.format(item.price)}',
-                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${item.qty} ${item.unit ?? "pcs"} x ${CurrencyFormatter.format(item.price)}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          CurrencyFormatter.format(item.subTotal),
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        CurrencyFormatter.format(item.subTotal),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
-                    ),
-                  )),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const Divider(),
 
               // Totals
-              _buildReceiptRow('Sub Total', CurrencyFormatter.format(invoice.subTotal)),
+              _buildReceiptRow(
+                'Sub Total',
+                CurrencyFormatter.format(invoice.subTotal),
+              ),
               if (invoice.discount > 0)
                 _buildReceiptRow(
                   invoice.promoName != null && invoice.promoName!.isNotEmpty
@@ -173,11 +192,28 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   '- ${CurrencyFormatter.format(invoice.discount)}',
                   color: AppColors.success,
                 ),
-              if (invoice.ppn > 0) _buildReceiptRow('PPN', '+ ${CurrencyFormatter.format(invoice.ppn)}'),
+              if (invoice.ppn > 0)
+                _buildReceiptRow(
+                  'PPN',
+                  '+ ${CurrencyFormatter.format(invoice.ppn)}',
+                ),
               const Divider(),
-              _buildReceiptRow('Grand Total', CurrencyFormatter.format(invoice.grandTotal), isBold: true, fontSize: 16),
-              _buildReceiptRow('Tunai (Diterima)', CurrencyFormatter.format(invoice.cash)),
-              _buildReceiptRow('Kembalian', CurrencyFormatter.format(invoice.change), isBold: true, color: AppColors.primary),
+              _buildReceiptRow(
+                'Grand Total',
+                CurrencyFormatter.format(invoice.grandTotal),
+                isBold: true,
+                fontSize: 16,
+              ),
+              _buildReceiptRow(
+                'Pembayaran Diterima',
+                CurrencyFormatter.format(invoice.cash),
+              ),
+              _buildReceiptRow(
+                'Kembalian',
+                CurrencyFormatter.format(invoice.change),
+                isBold: true,
+                color: AppColors.primary,
+              ),
               AppSizes.gapH24,
 
               // Action Buttons
@@ -212,7 +248,13 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     );
   }
 
-  Widget _buildReceiptRow(String label, String value, {bool isBold = false, double fontSize = 13, Color? color}) {
+  Widget _buildReceiptRow(
+    String label,
+    String value, {
+    bool isBold = false,
+    double fontSize = 13,
+    Color? color,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -237,5 +279,28 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
         ],
       ),
     );
+  }
+
+  List<InvoiceItemModel> _getGroupedItems(List<InvoiceItemModel> items) {
+    final Map<String, InvoiceItemModel> map = {};
+    for (final item in items) {
+      final key = '${item.itemId}_${item.price}';
+      if (map.containsKey(key)) {
+        final existing = map[key]!;
+        map[key] = InvoiceItemModel(
+          itemId: existing.itemId,
+          itemName: existing.itemName,
+          qty: existing.qty + item.qty,
+          price: existing.price,
+          discount: existing.discount + item.discount,
+          subTotal: existing.subTotal + item.subTotal,
+          unit: existing.unit,
+          itemCode: existing.itemCode,
+        );
+      } else {
+        map[key] = item;
+      }
+    }
+    return map.values.toList();
   }
 }

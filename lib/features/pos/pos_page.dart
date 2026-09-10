@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -430,6 +432,26 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
+    if (_selectedBranchId == null || _selectedWarehouseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan pilih Cabang dan Gudang terlebih dahulu!'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedPaymentMethodId <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Silakan pilih metode pembayaran terlebih dahulu!'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
     if (cash < grandTotal) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -442,9 +464,13 @@ class _PosPageState extends State<PosPage> {
 
     setState(() => _isProcessingCheckout = true);
 
+    final itemsPayload = _cartItems
+        .map((item) => item.toInvoiceItemJson())
+        .toList();
+
     final payload = <String, dynamic>{
-      if (_selectedBranchId != null) 'branch_id': _selectedBranchId,
-      if (_selectedWarehouseId != null) 'warehouse_id': _selectedWarehouseId,
+      'branch_id': _selectedBranchId,
+      'warehouse_id': _selectedWarehouseId,
       'payment_method_id': _selectedPaymentMethodId,
       'sub_total': _calculateSubTotal(),
       'discount': _calculateDiscount(),
@@ -453,20 +479,72 @@ class _PosPageState extends State<PosPage> {
       'cash': cash,
       'change': _calculateChange(),
       if (_selectedPromo != null) 'promo_id': _selectedPromo!.id,
-      'items': _cartItems.map((item) => item.toInvoiceItemJson()).toList(),
+      'items': itemsPayload,
+      'details': itemsPayload,
     };
 
+    debugPrint(
+      '[POS Checkout] Mengirim detail transaksi POS ke server: ${jsonEncode(payload)}',
+    );
     final res = await ApiService.saveInvoice(payload);
 
     if (!mounted) return;
     setState(() => _isProcessingCheckout = false);
 
     if (res.isSuccess && res.data != null) {
-      final invoice = res.data!;
+      var invoice = res.data!;
+      final cartItemsBackup = List<CartItemModel>.from(_cartItems);
       final promoUsed = _selectedPromo;
-      final effectiveInvoice = invoice.promoName == null && promoUsed != null
-          ? invoice.copyWith(promoName: promoUsed.name)
-          : invoice;
+
+      // Pastikan items dan rincian transaksi terisi lengkap untuk struk cetak
+      if (invoice.items.isEmpty && cartItemsBackup.isNotEmpty) {
+        invoice = invoice.copyWith(
+          items: cartItemsBackup
+              .map(
+                (item) => InvoiceItemModel(
+                  itemId: item.product.itemId,
+                  itemName: item.product.name,
+                  qty: item.qty,
+                  price: item.price,
+                  discount: item.discount,
+                  subTotal: item.subTotal,
+                  qrcode: item.qrcode.isNotEmpty ? item.qrcode : null,
+                  unit: item.product.unit,
+                  itemCode: item.product.code,
+                ),
+              )
+              .toList(),
+        );
+      }
+
+      final selectedPm = _paymentMethods
+          .where((p) => p.id == _selectedPaymentMethodId)
+          .firstOrNull;
+
+      if (invoice.branchName == null && _defaultBranch != null) {
+        invoice = invoice.copyWith(branchName: _defaultBranch!.name);
+      }
+      if (invoice.warehouseName == null && _defaultWarehouse != null) {
+        invoice = invoice.copyWith(warehouseName: _defaultWarehouse!.name);
+      }
+      if (invoice.paymentMethodName == null && selectedPm != null) {
+        invoice = invoice.copyWith(paymentMethodName: selectedPm.name);
+      }
+      if (invoice.promoName == null && promoUsed != null) {
+        invoice = invoice.copyWith(promoName: promoUsed.name);
+      }
+      if (invoice.subTotal == 0) {
+        invoice = invoice.copyWith(subTotal: _calculateSubTotal());
+      }
+      if (invoice.grandTotal == 0) {
+        invoice = invoice.copyWith(grandTotal: grandTotal);
+      }
+      if (invoice.cash == 0) {
+        invoice = invoice.copyWith(cash: cash);
+      }
+      if (invoice.change == 0) {
+        invoice = invoice.copyWith(change: _calculateChange());
+      }
 
       setState(() {
         _cartItems.clear();
@@ -478,7 +556,7 @@ class _PosPageState extends State<PosPage> {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (ctx) => ReceiptDialog(invoice: effectiveInvoice),
+        builder: (ctx) => ReceiptDialog(invoice: invoice),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -532,51 +610,54 @@ class _PosPageState extends State<PosPage> {
           ),
         ],
       ),
-      body: _isLoadingInitial
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                // Scrollable POS Content
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: AppSizes.paddingPage,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // 1. Info Cabang & Gudang
-                        _buildLocationCard(),
-                        AppSizes.gapH16,
+      body: SafeArea(
+        top: false,
+        child: _isLoadingInitial
+            ? const Center(child: CircularProgressIndicator())
+            : Column(
+                children: [
+                  // Scrollable POS Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: AppSizes.paddingPage,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Info Cabang & Gudang
+                          _buildLocationCard(),
+                          AppSizes.gapH16,
 
-                        // 2. Tombol Aksi: Scan QR Stok & Katalog Produk
-                        _buildActionButtons(totalItemsCount),
-                        AppSizes.gapH20,
-
-                        // 3. Section Daftar Item di Keranjang
-                        _buildCartSection(),
-                        AppSizes.gapH20,
-
-                        // 4. Section Promo Diskon
-                        if (_promos.isNotEmpty) ...[
-                          _buildPromoSection(),
+                          // 2. Tombol Aksi: Scan QR Stok & Katalog Produk
+                          _buildActionButtons(totalItemsCount),
                           AppSizes.gapH20,
+
+                          // 3. Section Daftar Item di Keranjang
+                          _buildCartSection(),
+                          AppSizes.gapH20,
+
+                          // 4. Section Promo Diskon
+                          if (_promos.isNotEmpty) ...[
+                            _buildPromoSection(),
+                            AppSizes.gapH20,
+                          ],
+
+                          // 5. Section Metode Pembayaran
+                          _buildPaymentMethodSection(),
+                          AppSizes.gapH20,
+
+                          // 6. Rincian Tagihan & Input Uang Tunai
+                          _buildFinancialSummarySection(),
+                          AppSizes.gapH24,
                         ],
-
-                        // 5. Section Metode Pembayaran
-                        _buildPaymentMethodSection(),
-                        AppSizes.gapH20,
-
-                        // 6. Rincian Tagihan & Input Uang Tunai
-                        _buildFinancialSummarySection(),
-                        AppSizes.gapH24,
-                      ],
+                      ),
                     ),
                   ),
-                ),
 
-                // Fixed Bottom Checkout Bar
-                _buildBottomCheckoutBar(grandTotal),
-              ],
-            ),
+                  // Fixed Bottom Checkout Bar
+                  _buildBottomCheckoutBar(grandTotal),
+                ],
+              ),
+      ),
     );
   }
 
@@ -651,9 +732,7 @@ class _PosPageState extends State<PosPage> {
                   backgroundColor: const Color(0xFFE8EAF6),
                   foregroundColor: const Color(0xFF1A237E),
                   elevation: 0,
-                  side: const BorderSide(
-                    color: Color(0xFFC5CAE9),
-                  ),
+                  side: const BorderSide(color: Color(0xFFC5CAE9)),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
                     vertical: 11,
@@ -687,10 +766,7 @@ class _PosPageState extends State<PosPage> {
               foregroundColor: AppColors.textPrimary,
               side: BorderSide(color: Colors.grey.shade300),
               backgroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 9,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               ),
@@ -707,10 +783,7 @@ class _PosPageState extends State<PosPage> {
               children: [
                 const Text(
                   'Pilih dari Katalog Produk',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                 ),
                 if (totalItemsCount > 0) ...[
                   const SizedBox(width: 8),
@@ -1102,7 +1175,11 @@ class _PosPageState extends State<PosPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_rounded, color: Color(0xFF2E7D32), size: 18),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  color: Color(0xFF2E7D32),
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
@@ -1238,7 +1315,7 @@ class _PosPageState extends State<PosPage> {
 
             // Input Uang Tunai Diterima
             const Text(
-              'Uang Tunai Diterima (Cash):',
+              'Uang Diterima:',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             ),
             AppSizes.gapH8,
@@ -1258,19 +1335,7 @@ class _PosPageState extends State<PosPage> {
               ),
               onChanged: (_) => setState(() {}),
             ),
-            AppSizes.gapH8,
 
-            // Quick Cash Nominal Chips
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _buildQuickCashChip('Uang Pas', grandTotal),
-                _buildQuickCashChip('50.000', 50000),
-                _buildQuickCashChip('100.000', 100000),
-                _buildQuickCashChip('200.000', 200000),
-              ],
-            ),
             const Divider(height: 24),
 
             // Kembalian
@@ -1284,17 +1349,6 @@ class _PosPageState extends State<PosPage> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildQuickCashChip(String label, double amount) {
-    return ActionChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      onPressed: () {
-        _cashController.text = amount.toStringAsFixed(0);
-        setState(() {});
-      },
     );
   }
 

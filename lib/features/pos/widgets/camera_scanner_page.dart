@@ -85,9 +85,11 @@ class _CameraScannerPageState extends State<CameraScannerPage> with SingleTicker
           ),
         ],
       ),
-      body: Stack(
-        children: [
-          // Live Camera Preview
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            // Live Camera Preview
           MobileScanner(
             controller: _controller,
             onDetect: _onDetect,
@@ -215,6 +217,7 @@ class _CameraScannerPageState extends State<CameraScannerPage> with SingleTicker
             },
           ),
         ],
+        ),
       ),
     );
   }

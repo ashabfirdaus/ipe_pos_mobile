@@ -90,28 +90,31 @@ class _ItemTransactionsPageState extends State<ItemTransactionsPage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSizes.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Item ID Selector Card
-            _buildSearchCard(),
-            AppSizes.gapH16,
-
-            if (_isLoading)
-              const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
-            else if (_errorMessage != null)
-              _buildErrorCard()
-            else if (_summary != null) ...[
-              // Summary Cards
-              _buildSummarySection(),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSizes.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Item ID Selector Card
+              _buildSearchCard(),
               AppSizes.gapH16,
 
-              // Details List Section
-              _buildDetailsSection(),
+              if (_isLoading)
+                const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
+              else if (_errorMessage != null)
+                _buildErrorCard()
+              else if (_summary != null) ...[
+                // Summary Cards
+                _buildSummarySection(),
+                AppSizes.gapH16,
+
+                // Details List Section
+                _buildDetailsSection(),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

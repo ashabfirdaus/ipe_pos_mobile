@@ -1,4 +1,5 @@
 // Models for Auth, POS, Invoices, Items, and Payment Notifications
+import '../config/api_config.dart';
 
 class UserModel {
   final dynamic id;
@@ -309,13 +310,20 @@ class ProductModel {
       stock: double.tryParse(
             json['remaining_qty']?.toString() ??
                 json['stock']?.toString() ??
+                json['total_stock']?.toString() ??
                 json['qty']?.toString() ??
                 '0',
           ) ??
           0.0,
       unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'Pcs',
       categoryName: json['category_name']?.toString() ?? json['category']?.toString(),
-      imagePath: json['image_path']?.toString() ?? json['image']?.toString(),
+      imagePath: () {
+        final raw = json['image_path']?.toString() ?? json['image']?.toString();
+        if (raw == null || raw.isEmpty || raw == 'null') return null;
+        if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+        final base = ApiConfig.baseUrl.replaceAll('/api', '');
+        return raw.startsWith('/') ? '$base$raw' : '$base/$raw';
+      }(),
       qrcode: json['qrcode']?.toString(),
     );
   }
@@ -338,17 +346,20 @@ class CartItemModel {
 
   double get subTotal => (price * qty) - discount;
 
-  Map<String, dynamic> toInvoiceItemJson() => {
-    'item_id': product.itemId,
-    'item_name': product.name,
-    'qty': qty,
-    'price': price,
-    'discount': discount,
-    'sub_total': subTotal,
-    'qrcode': qrcode.isNotEmpty ? qrcode : null,
-    if (product.unit != null) 'unit': product.unit,
-    if (product.code != null) 'code': product.code,
-  };
+  Map<String, dynamic> toInvoiceItemJson() {
+    final finalQr = qrcode.isNotEmpty ? qrcode : product.qrcode;
+    return {
+      'item_id': product.itemId,
+      'item_name': product.name,
+      'qty': qty,
+      'price': price,
+      'discount': discount,
+      'sub_total': subTotal,
+      'qrcode': finalQr != null && finalQr.isNotEmpty ? finalQr : null,
+      if (product.unit != null) 'unit': product.unit,
+      if (product.code != null) 'code': product.code,
+    };
+  }
 }
 
 class InvoiceItemModel {

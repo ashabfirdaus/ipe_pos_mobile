@@ -46,12 +46,24 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
   }
 
   Future<void> _loadProducts({String? search}) async {
+    final query = search?.trim();
+    if (query != null && query.isNotEmpty && query.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Minimal input pencarian adalah 3 karakter.'),
+          backgroundColor: AppColors.warning,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
 
     final res = await ApiService.getProducts(
       warehouseId: widget.warehouseId,
       branchId: widget.branchId,
-      search: search,
+      search: query,
     );
 
     if (!mounted) return;
@@ -90,13 +102,17 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       return;
     }
 
-    if (qrcode.isNotEmpty) {
-      final isDuplicate = widget.cartItems.any((item) => item.qrcode == qrcode);
+    final effectiveQrcode = qrcode.isNotEmpty
+        ? qrcode
+        : (product.qrcode?.isNotEmpty == true ? product.qrcode! : '');
+
+    if (effectiveQrcode.isNotEmpty) {
+      final isDuplicate = widget.cartItems.any((item) => item.qrcode == effectiveQrcode);
       if (isDuplicate) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'QR Code stok "$qrcode" sudah ada di dalam keranjang!',
+              'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
             ),
             backgroundColor: AppColors.warning,
           ),
@@ -110,7 +126,7 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
             product: product,
             qty: qty,
             price: product.price,
-            qrcode: qrcode,
+            qrcode: effectiveQrcode,
           ),
         );
       });
@@ -211,17 +227,18 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       if (!mounted) return;
       if (res.isSuccess && res.data != null) {
         final product = res.data!;
+        final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : scannedCode;
         int finalQty = 1;
         if (product.stock > 1) {
           final chosenQty = await StockQtyConfirmDialog.show(
             context,
             product: product,
-            qrcode: scannedCode,
+            qrcode: actualQrCode,
           );
           if (chosenQty == null) return;
           finalQty = chosenQty;
         }
-        _addToCart(product, qrcode: scannedCode, qty: finalQty);
+        _addToCart(product, qrcode: actualQrCode, qty: finalQty);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

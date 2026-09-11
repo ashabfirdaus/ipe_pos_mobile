@@ -53,6 +53,14 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
     final cleanCode = code.trim();
     if (cleanCode.isEmpty) return;
 
+    if (cleanCode.length < 3) {
+      setState(() {
+        _errorMessage = 'Minimal input pencarian adalah 3 digit / karakter.';
+        _scannedProduct = null;
+      });
+      return;
+    }
+
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -86,7 +94,9 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
 
   Future<void> _confirmAdd() async {
     if (_scannedProduct != null) {
-      final code = _codeController.text.trim();
+      final code = _scannedProduct!.qrcode?.isNotEmpty == true
+          ? _scannedProduct!.qrcode!
+          : _codeController.text.trim();
       int finalQty = 1;
       if (_scannedProduct!.stock > 1) {
         final chosenQty = await StockQtyConfirmDialog.show(
@@ -241,6 +251,11 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                                   Text(
                                     'Kode: ${_scannedProduct!.code}',
                                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                  ),
+                                if (_scannedProduct!.qrcode != null && _scannedProduct!.qrcode!.isNotEmpty)
+                                  Text(
+                                    'QR Stok: ${_scannedProduct!.qrcode}',
+                                    style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
                                   ),
                                 AppSizes.gapH4,
                                 Text(

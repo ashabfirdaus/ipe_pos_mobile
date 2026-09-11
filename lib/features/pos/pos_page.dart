@@ -190,17 +190,18 @@ class _PosPageState extends State<PosPage> {
       if (!mounted) return;
       if (res.isSuccess && res.data != null) {
         final product = res.data!;
+        final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : scannedCode;
         int finalQty = 1;
         if (product.stock > 1) {
           final chosenQty = await StockQtyConfirmDialog.show(
             context,
             product: product,
-            qrcode: scannedCode,
+            qrcode: actualQrCode,
           );
           if (chosenQty == null) return;
           finalQty = chosenQty;
         }
-        _addToCart(product, qrcode: scannedCode, qty: finalQty);
+        _addToCart(product, qrcode: actualQrCode, qty: finalQty);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -276,14 +277,18 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
+    final effectiveQrcode = qrcode.isNotEmpty
+        ? qrcode
+        : (product.qrcode?.isNotEmpty == true ? product.qrcode! : '');
+
     // 1. Jika ditambahkan dengan QR Code stok fisik
-    if (qrcode.isNotEmpty) {
-      final isQrDuplicate = _cartItems.any((item) => item.qrcode == qrcode);
+    if (effectiveQrcode.isNotEmpty) {
+      final isQrDuplicate = _cartItems.any((item) => item.qrcode == effectiveQrcode);
       if (isQrDuplicate) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'QR Code stok "$qrcode" sudah ada di dalam keranjang!',
+              'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
             ),
             backgroundColor: AppColors.warning,
           ),
@@ -305,13 +310,13 @@ class _PosPageState extends State<PosPage> {
                 product: product,
                 qty: qty,
                 price: product.price,
-                qrcode: qrcode,
+                qrcode: effectiveQrcode,
               ),
             );
           });
         } else {
           setState(() {
-            _cartItems[unassignedIdx].qrcode = qrcode;
+            _cartItems[unassignedIdx].qrcode = effectiveQrcode;
             _cartItems[unassignedIdx].qty = qty;
           });
         }
@@ -322,7 +327,7 @@ class _PosPageState extends State<PosPage> {
               product: product,
               qty: qty,
               price: product.price,
-              qrcode: qrcode,
+              qrcode: effectiveQrcode,
             ),
           );
         });

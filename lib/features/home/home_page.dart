@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_colors.dart';
@@ -79,46 +80,97 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(AppConfig.appName),
+  Future<bool> _showExitConfirmation() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.exit_to_app_rounded, color: AppColors.primary),
+            SizedBox(width: 8),
+            Text(
+              'Keluar Aplikasi',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Apakah Anda yakin ingin keluar dari aplikasi ${AppConfig.appName}?',
+          style: TextStyle(fontSize: 14),
+        ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.print_outlined),
-            tooltip: 'Pengaturan Printer Thermal',
-            onPressed: () {
-              Navigator.of(context).pushNamed(AppRoutes.printerSettings);
-            },
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
           ),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Keluar (Logout)',
-            onPressed: _handleLogout,
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Keluar'),
           ),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: RefreshIndicator(
-          onRefresh: _loadUserSession,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: AppSizes.paddingPage,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // User Greeting Card
-                _buildGreetingCard(),
-                AppSizes.gapH20,
+    );
 
-                // Quick Actions Grid (Main POS modules)
-                const Text('Menu Utama Kasir POS', style: AppTextStyles.h3),
-                AppSizes.gapH12,
-                _buildMenuGrid(),
-                AppSizes.gapH24,
-              ],
+    return shouldExit ?? false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldExit = await _showExitConfirmation();
+        if (shouldExit && context.mounted) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text(AppConfig.appName),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.print_outlined),
+              tooltip: 'Pengaturan Printer Thermal',
+              onPressed: () {
+                Navigator.of(context).pushNamed(AppRoutes.printerSettings);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout_rounded),
+              tooltip: 'Keluar (Logout)',
+              onPressed: _handleLogout,
+            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: RefreshIndicator(
+            onRefresh: _loadUserSession,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: AppSizes.paddingPage,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // User Greeting Card
+                  _buildGreetingCard(),
+                  AppSizes.gapH20,
+
+                  // Quick Actions Grid (Main POS modules)
+                  const Text('Menu Utama Kasir POS', style: AppTextStyles.h3),
+                  AppSizes.gapH12,
+                  _buildMenuGrid(),
+                  AppSizes.gapH24,
+                ],
+              ),
             ),
           ),
         ),

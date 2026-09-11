@@ -2,7 +2,7 @@ class ApiConfig {
   ApiConfig._();
 
   // Single source of truth for Base API URL
-  static const String baseUrl = 'http://192.168.110.22:8080/api';
+  static const String baseUrl = 'https://app.intipangan.com/api';
   static const String defaultBaseUrl = baseUrl;
 
   // Connection Timeouts

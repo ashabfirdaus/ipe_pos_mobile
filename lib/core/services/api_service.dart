@@ -411,8 +411,13 @@ class ApiService {
     int? warehouseId,
     int? branchId,
   }) async {
+    final cleanQr = qrcode.trim();
+    if (cleanQr.isEmpty || cleanQr.toLowerCase() == 'null') {
+      return ApiResponse.error(message: 'QR Code kosong atau tidak valid.');
+    }
+
     final body = <String, dynamic>{
-      'qrcode': qrcode,
+      'qrcode': cleanQr,
     };
     if (warehouseId != null) body['warehouse_id'] = warehouseId;
     if (branchId != null) body['branch_id'] = branchId;

@@ -43,180 +43,188 @@ class _CameraScannerPageState extends State<CameraScannerPage> with SingleTicker
   }
 
   void _onDetect(BarcodeCapture capture) {
-    if (_isScanned) return;
+    if (_isScanned || !mounted) return;
 
     final barcode = capture.barcodes.firstOrNull;
-    if (barcode != null && barcode.rawValue != null && barcode.rawValue!.trim().isNotEmpty) {
-      setState(() {
-        _isScanned = true;
-      });
-      final code = barcode.rawValue!.trim();
-      Navigator.of(context).pop(code);
+    final rawValue = barcode?.rawValue?.trim();
+    if (rawValue != null && rawValue.isNotEmpty && rawValue.toLowerCase() != 'null') {
+      _isScanned = true;
+      _controller.stop();
+      if (mounted) {
+        Navigator.of(context).pop(rawValue);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, result) {
+        _isScanned = true;
+        _controller.stop();
+      },
+      child: Scaffold(
         backgroundColor: Colors.black,
-        foregroundColor: Colors.white,
-        title: const Text('Scan QR / Barcode Kamera', style: TextStyle(color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: ValueListenableBuilder<MobileScannerState>(
-              valueListenable: _controller,
-              builder: (context, state, child) {
-                final isTorchOn = state.torchState == TorchState.on;
-                return Icon(
-                  isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
-                  color: isTorchOn ? Colors.amber : Colors.white,
-                );
-              },
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          title: const Text('Scan QR / Barcode Kamera', style: TextStyle(color: Colors.white)),
+          actions: [
+            IconButton(
+              icon: ValueListenableBuilder<MobileScannerState>(
+                valueListenable: _controller,
+                builder: (context, state, child) {
+                  final isTorchOn = state.torchState == TorchState.on;
+                  return Icon(
+                    isTorchOn ? Icons.flash_on_rounded : Icons.flash_off_rounded,
+                    color: isTorchOn ? Colors.amber : Colors.white,
+                  );
+                },
+              ),
+              tooltip: 'Senter',
+              onPressed: () => _controller.toggleTorch(),
             ),
-            tooltip: 'Senter',
-            onPressed: () => _controller.toggleTorch(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.flip_camera_ios_rounded, color: Colors.white),
-            tooltip: 'Ganti Kamera',
-            onPressed: () => _controller.switchCamera(),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Stack(
-          children: [
-            // Live Camera Preview
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSizes.xl),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 64),
-                      AppSizes.gapH16,
-                      const Text(
-                        'Kamera tidak dapat diakses atau izin belum diberikan.',
-                        style: TextStyle(color: Colors.white, fontSize: 16),
-                        textAlign: TextAlign.center,
-                      ),
-                      AppSizes.gapH16,
-                      ElevatedButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        child: const Text('Kembali ke Input Manual'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-
-          // Scanner Overlay with Laser & Target Area
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final scanAreaSize = constraints.maxWidth * 0.72;
-              final topOffset = (constraints.maxHeight - scanAreaSize) / 2 - 40;
-              final leftOffset = (constraints.maxWidth - scanAreaSize) / 2;
-
-              return Stack(
-                children: [
-                  // Darkened background cutout
-                  ColorFiltered(
-                    colorFilter: ColorFilter.mode(
-                      Colors.black.withValues(alpha: 0.65),
-                      BlendMode.srcOut,
-                    ),
-                    child: Stack(
-                      children: [
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.transparent,
-                            backgroundBlendMode: BlendMode.dstOut,
-                          ),
-                        ),
-                        Positioned(
-                          top: topOffset,
-                          left: leftOffset,
-                          width: scanAreaSize,
-                          height: scanAreaSize,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Viewfinder Frame
-                  Positioned(
-                    top: topOffset,
-                    left: leftOffset,
-                    width: scanAreaSize,
-                    height: scanAreaSize,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.primaryLight, width: 2.5),
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(18),
-                        child: AnimatedBuilder(
-                          animation: _animation,
-                          builder: (context, child) {
-                            return CustomPaint(
-                              painter: _LaserPainter(progress: _animation.value),
-                            );
-                          },
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Bottom Instructions Text
-                  Positioned(
-                    bottom: 40,
-                    left: 20,
-                    right: 20,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                      ),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
+            IconButton(
+              icon: const Icon(Icons.flip_camera_ios_rounded, color: Colors.white),
+              tooltip: 'Ganti Kamera',
+              onPressed: () => _controller.switchCamera(),
+            ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Stack(
+            children: [
+              // Live Camera Preview
+              MobileScanner(
+                controller: _controller,
+                onDetect: _onDetect,
+                errorBuilder: (context, error) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSizes.xl),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            'Arahkan kamera ke QR Code atau Barcode Produk',
-                            style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                          const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 64),
+                          AppSizes.gapH16,
+                          const Text(
+                            'Kamera tidak dapat diakses atau izin belum diberikan.',
+                            style: TextStyle(color: Colors.white, fontSize: 16),
                             textAlign: TextAlign.center,
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Pemindaian akan diproses secara otomatis',
-                            style: TextStyle(color: Colors.white70, fontSize: 11),
-                            textAlign: TextAlign.center,
+                          AppSizes.gapH16,
+                          ElevatedButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            child: const Text('Kembali ke Input Manual'),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                ],
-              );
-            },
+                  );
+                },
+              ),
+
+              // Scanner Overlay with Laser & Target Area
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final scanAreaSize = constraints.maxWidth * 0.72;
+                  final topOffset = (constraints.maxHeight - scanAreaSize) / 2 - 40;
+                  final leftOffset = (constraints.maxWidth - scanAreaSize) / 2;
+
+                  return Stack(
+                    children: [
+                      // Darkened background cutout
+                      ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          Colors.black.withValues(alpha: 0.65),
+                          BlendMode.srcOut,
+                        ),
+                        child: Stack(
+                          children: [
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.transparent,
+                                backgroundBlendMode: BlendMode.dstOut,
+                              ),
+                            ),
+                            Positioned(
+                              top: topOffset,
+                              left: leftOffset,
+                              width: scanAreaSize,
+                              height: scanAreaSize,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Viewfinder Frame
+                      Positioned(
+                        top: topOffset,
+                        left: leftOffset,
+                        width: scanAreaSize,
+                        height: scanAreaSize,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.primaryLight, width: 2.5),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(18),
+                            child: AnimatedBuilder(
+                              animation: _animation,
+                              builder: (context, child) {
+                                return CustomPaint(
+                                  painter: _LaserPainter(progress: _animation.value),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      // Bottom Instructions Text
+                      Positioned(
+                        bottom: 40,
+                        left: 20,
+                        right: 20,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                          ),
+                          child: const Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Arahkan kamera ke QR Code atau Barcode Produk',
+                                style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                textAlign: TextAlign.center,
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                'Pemindaian akan diproses secara otomatis',
+                                style: TextStyle(color: Colors.white70, fontSize: 11),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
           ),
-        ],
         ),
       ),
     );

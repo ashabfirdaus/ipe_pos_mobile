@@ -209,48 +209,54 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
     );
 
-    if (scannedCode != null && scannedCode.isNotEmpty) {
-      if (!mounted) return;
+    // Jika scan dibatalkan / ditutup tanpa mendapatkan QR code, jangan kirim request ke server
+    if (scannedCode == null ||
+        scannedCode.trim().isEmpty ||
+        scannedCode.trim().toLowerCase() == 'null') {
+      return;
+    }
+
+    final cleanCode = scannedCode.trim();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Mencari kode: $cleanCode...'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
+
+    final res = await ApiService.scanQr(
+      qrcode: cleanCode,
+      warehouseId: widget.warehouseId,
+      branchId: widget.branchId,
+    );
+
+    if (!mounted) return;
+    if (res.isSuccess && res.data != null) {
+      final product = res.data!;
+      final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : cleanCode;
+      int finalQty = 1;
+      if (product.stock > 1) {
+        final chosenQty = await StockQtyConfirmDialog.show(
+          context,
+          product: product,
+          qrcode: actualQrCode,
+        );
+        if (chosenQty == null) return;
+        finalQty = chosenQty;
+      }
+      _addToCart(product, qrcode: actualQrCode, qty: finalQty);
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Mencari kode: $scannedCode...'),
-          duration: const Duration(seconds: 1),
+          content: Text(
+            res.message.isNotEmpty
+                ? res.message
+                : 'Produk "$cleanCode" tidak ditemukan.',
+          ),
+          backgroundColor: AppColors.error,
         ),
       );
-
-      final res = await ApiService.scanQr(
-        qrcode: scannedCode,
-        warehouseId: widget.warehouseId,
-        branchId: widget.branchId,
-      );
-
-      if (!mounted) return;
-      if (res.isSuccess && res.data != null) {
-        final product = res.data!;
-        final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : scannedCode;
-        int finalQty = 1;
-        if (product.stock > 1) {
-          final chosenQty = await StockQtyConfirmDialog.show(
-            context,
-            product: product,
-            qrcode: actualQrCode,
-          );
-          if (chosenQty == null) return;
-          finalQty = chosenQty;
-        }
-        _addToCart(product, qrcode: actualQrCode, qty: finalQty);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              res.message.isNotEmpty
-                  ? res.message
-                  : 'Produk "$scannedCode" tidak ditemukan.',
-            ),
-            backgroundColor: AppColors.error,
-          ),
-        );
-      }
     }
   }
 
@@ -415,20 +421,56 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Product Icon Avatar
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: qtyInCart > 0
-                    ? AppColors.primary.withValues(alpha: 0.12)
-                    : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              ),
-              child: Icon(
-                Icons.shopping_bag_outlined,
-                color: qtyInCart > 0 ? AppColors.primary : Colors.grey.shade600,
-                size: 28,
+            // Product Icon / Image Avatar
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: qtyInCart > 0
+                      ? AppColors.primary.withValues(alpha: 0.12)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                ),
+                child: (product.imagePath != null && product.imagePath!.isNotEmpty)
+                    ? Image.network(
+                        product.imagePath!,
+                        width: 52,
+                        height: 52,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => Icon(
+                          Icons.shopping_bag_outlined,
+                          color: qtyInCart > 0
+                              ? AppColors.primary
+                              : Colors.grey.shade600,
+                          size: 28,
+                        ),
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return Center(
+                            child: SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppColors.primary,
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded /
+                                        loadingProgress.expectedTotalBytes!
+                                    : null,
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    : Icon(
+                        Icons.shopping_bag_outlined,
+                        color: qtyInCart > 0
+                            ? AppColors.primary
+                            : Colors.grey.shade600,
+                        size: 28,
+                      ),
               ),
             ),
             AppSizes.gapW12,

@@ -9,7 +9,7 @@ class AppConfig {
   static const String buildNumber = '1';
 
   // Environment mode
-  static const AppEnvironment environment = AppEnvironment.development;
+  static const AppEnvironment environment = AppEnvironment.production;
   static bool get isDev => environment == AppEnvironment.development;
   static bool get isStaging => environment == AppEnvironment.staging;
   static bool get isProd => environment == AppEnvironment.production;

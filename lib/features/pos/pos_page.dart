@@ -157,63 +157,71 @@ class _PosPageState extends State<PosPage> {
       MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
     );
 
-    if (scannedCode != null && scannedCode.isNotEmpty) {
-      if (!mounted) return;
+    // Jika scanner dibatalkan / ditutup tanpa mendapatkan QR code, jangan kirim request ke server
+    if (scannedCode == null ||
+        scannedCode.trim().isEmpty ||
+        scannedCode.trim().toLowerCase() == 'null') {
+      return;
+    }
 
-      // Cek apakah QR stok ini sudah ada di dalam keranjang
-      final isDuplicate = _cartItems.any((item) => item.qrcode == scannedCode);
-      if (isDuplicate) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR Code stok "$scannedCode" sudah ada di dalam keranjang!',
-            ),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-        return;
-      }
+    final cleanCode = scannedCode.trim();
+    if (!mounted) return;
 
+    // Cek apakah QR stok ini sudah ada di dalam keranjang
+    final isDuplicate = _cartItems.any((item) => item.qrcode == cleanCode);
+    if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Mencari data stok QR: $scannedCode...'),
-          duration: const Duration(seconds: 1),
+          content: Text(
+            'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
+          ),
+          backgroundColor: AppColors.warning,
         ),
       );
+      return;
+    }
 
-      final res = await ApiService.scanQr(
-        qrcode: scannedCode,
-        warehouseId: _selectedWarehouseId,
-        branchId: _selectedBranchId,
-      );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Mencari data stok QR: $cleanCode...'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
 
-      if (!mounted) return;
-      if (res.isSuccess && res.data != null) {
-        final product = res.data!;
-        final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : scannedCode;
-        int finalQty = 1;
-        if (product.stock > 1) {
-          final chosenQty = await StockQtyConfirmDialog.show(
-            context,
-            product: product,
-            qrcode: actualQrCode,
-          );
-          if (chosenQty == null) return;
-          finalQty = chosenQty;
-        }
-        _addToCart(product, qrcode: actualQrCode, qty: finalQty);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              res.message.isNotEmpty
-                  ? res.message
-                  : 'Stok barang dengan QR "$scannedCode" tidak ditemukan.',
-            ),
-            backgroundColor: AppColors.error,
-          ),
+    final res = await ApiService.scanQr(
+      qrcode: cleanCode,
+      warehouseId: _selectedWarehouseId,
+      branchId: _selectedBranchId,
+    );
+
+    if (!mounted) return;
+    if (res.isSuccess && res.data != null) {
+      final product = res.data!;
+      final actualQrCode = product.qrcode?.isNotEmpty == true
+          ? product.qrcode!
+          : cleanCode;
+      int finalQty = 1;
+      if (product.stock > 1) {
+        final chosenQty = await StockQtyConfirmDialog.show(
+          context,
+          product: product,
+          qrcode: actualQrCode,
         );
+        if (chosenQty == null) return;
+        finalQty = chosenQty;
       }
+      _addToCart(product, qrcode: actualQrCode, qty: finalQty);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            res.message.isNotEmpty
+                ? res.message
+                : 'Stok barang dengan QR "$cleanCode" tidak ditemukan.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 
@@ -235,35 +243,40 @@ class _PosPageState extends State<PosPage> {
       MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
     );
 
-    if (scannedCode != null && scannedCode.isNotEmpty) {
-      if (!mounted) return;
+    if (scannedCode == null ||
+        scannedCode.trim().isEmpty ||
+        scannedCode.trim().toLowerCase() == 'null') {
+      return;
+    }
 
-      final isDuplicate = _cartItems.any((item) => item.qrcode == scannedCode);
-      if (isDuplicate) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR Code stok "$scannedCode" sudah digunakan di keranjang!',
-            ),
-            backgroundColor: AppColors.warning,
-          ),
-        );
-        return;
-      }
+    final cleanCode = scannedCode.trim();
+    if (!mounted) return;
 
-      setState(() {
-        _cartItems[index].qrcode = scannedCode;
-      });
-      _onCartChanged();
-
+    final isDuplicate = _cartItems.any((item) => item.qrcode == cleanCode);
+    if (isDuplicate) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('QR Code stok "$scannedCode" berhasil dipasangkan'),
-          backgroundColor: AppColors.success,
-          duration: const Duration(seconds: 2),
+          content: Text(
+            'QR Code stok "$cleanCode" sudah digunakan di keranjang!',
+          ),
+          backgroundColor: AppColors.warning,
         ),
       );
+      return;
     }
+
+    setState(() {
+      _cartItems[index].qrcode = cleanCode;
+    });
+    _onCartChanged();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('QR Code stok "$cleanCode" berhasil dipasangkan'),
+        backgroundColor: AppColors.success,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   void _addToCart(ProductModel product, {String qrcode = '', int qty = 1}) {
@@ -283,7 +296,9 @@ class _PosPageState extends State<PosPage> {
 
     // 1. Jika ditambahkan dengan QR Code stok fisik
     if (effectiveQrcode.isNotEmpty) {
-      final isQrDuplicate = _cartItems.any((item) => item.qrcode == effectiveQrcode);
+      final isQrDuplicate = _cartItems.any(
+        (item) => item.qrcode == effectiveQrcode,
+      );
       if (isQrDuplicate) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -629,8 +644,8 @@ class _PosPageState extends State<PosPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           // 1. Info Cabang & Gudang
-                          _buildLocationCard(),
-                          AppSizes.gapH16,
+                          // _buildLocationCard(),
+                          // AppSizes.gapH16,
 
                           // 2. Tombol Aksi: Scan QR Stok & Katalog Produk
                           _buildActionButtons(totalItemsCount),

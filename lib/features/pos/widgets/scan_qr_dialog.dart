@@ -43,9 +43,12 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
       ),
     );
 
-    if (scannedCode != null && scannedCode.isNotEmpty) {
-      _codeController.text = scannedCode;
-      _handleScan(scannedCode);
+    if (scannedCode != null &&
+        scannedCode.trim().isNotEmpty &&
+        scannedCode.trim().toLowerCase() != 'null') {
+      final cleanCode = scannedCode.trim();
+      _codeController.text = cleanCode;
+      _handleScan(cleanCode);
     }
   }
 
@@ -229,14 +232,25 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 50,
-                            height: 50,
-                            decoration: BoxDecoration(
-                              color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                            child: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(AppSizes.radiusSm),
+                              ),
+                              child: _scannedProduct!.imagePath != null &&
+                                      _scannedProduct!.imagePath!.isNotEmpty
+                                  ? Image.network(
+                                      _scannedProduct!.imagePath!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) =>
+                                          const Icon(Icons.inventory_2_rounded, color: AppColors.primary),
+                                    )
+                                  : const Icon(Icons.inventory_2_rounded, color: AppColors.primary),
                             ),
-                            child: const Icon(Icons.inventory_2_rounded, color: AppColors.primary),
                           ),
                           AppSizes.gapW12,
                           Expanded(

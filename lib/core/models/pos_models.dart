@@ -318,7 +318,11 @@ class ProductModel {
       unit: json['unit']?.toString() ?? json['unit_name']?.toString() ?? 'Pcs',
       categoryName: json['category_name']?.toString() ?? json['category']?.toString(),
       imagePath: () {
-        final raw = json['image_path']?.toString() ?? json['image']?.toString();
+        final raw = json['image_path']?.toString() ??
+            json['image']?.toString() ??
+            json['image_url']?.toString() ??
+            json['photo']?.toString() ??
+            json['picture']?.toString();
         if (raw == null || raw.isEmpty || raw == 'null') return null;
         if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
         final base = ApiConfig.baseUrl.replaceAll('/api', '');

@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
 import '../../core/config/app_config.dart';
 import '../../core/constants/app_assets.dart';
 import '../../core/constants/app_colors.dart';
@@ -50,68 +52,73 @@ class _SplashPageState extends State<SplashPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: AppColors.primaryGradient,
-        ),
-        child: SafeArea(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: SizedBox(
+          width: double.infinity,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(AppSizes.radiusLg),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.15),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
+              const Spacer(flex: 3),
+
+              // App Icon
+              Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Image.asset(
+                  AppAssets.appIcon,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.point_of_sale_rounded,
+                    size: 64,
+                    color: AppColors.primary,
                   ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(
-                AppAssets.appIcon,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.point_of_sale_rounded,
-                  size: 64,
-                  color: AppColors.primary,
                 ),
               ),
-            ),
-            AppSizes.gapH24,
-            Text(
-              AppConfig.appName,
-              style: AppTextStyles.h1.copyWith(
-                color: Colors.white,
-                letterSpacing: 1.2,
+              AppSizes.gapH16,
+              Text(
+                AppConfig.appName,
+                style: AppTextStyles.h2.copyWith(
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-            AppSizes.gapH8,
-            Text(
-              'v${AppConfig.appVersion} (${AppConfig.environment.name})',
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: Colors.white70,
+
+              const Spacer(flex: 3),
+
+              const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                ),
               ),
-            ),
-            AppSizes.gapH32,
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              AppSizes.gapH16,
+              Text(
+                'v${AppConfig.appVersion}',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textMuted,
+                ),
               ),
-            ),
-          ],
+              AppSizes.gapH24,
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

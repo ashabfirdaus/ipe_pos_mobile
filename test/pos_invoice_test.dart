@@ -262,6 +262,30 @@ void main() {
       expect(cashier, 'Budi Santoso');
     });
 
+    test('PromoModel.fromJson correctly parses percentage promo from backend response', () {
+      final backendPromo = {
+        'id': 1,
+        'promo_code': 'PROMO10',
+        'promo_name': 'Diskon 10% All Item',
+        'promo_type': 1,
+        'discount_percentage': '10.00',
+        'required_total_qty': null,
+        'status': '1',
+      };
+
+      final promo = PromoModel.fromJson(backendPromo);
+      expect(promo.id, 1);
+      expect(promo.name, 'Diskon 10% All Item');
+      expect(promo.discountType, 'percentage');
+      expect(promo.discountValue, 10.0);
+
+      // Verify discount calculation
+      final subTotal = 100000.0;
+      final discount = (subTotal * promo.discountValue) / 100;
+      expect(discount, 10000.0);
+      expect(subTotal - discount, 90000.0);
+    });
+
     test('ApiService handleUnauthenticated immediately clears session and token', () async {
       await StorageService.saveAuthToken('dummy_expired_token');
       expect(await StorageService.hasValidToken(), isTrue);

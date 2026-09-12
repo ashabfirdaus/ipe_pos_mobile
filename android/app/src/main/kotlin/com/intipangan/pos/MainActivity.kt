@@ -1,4 +1,4 @@
-package com.example.ipe_mobile_pos
+package com.intipangan.pos
 
 import io.flutter.embedding.android.FlutterActivity
 

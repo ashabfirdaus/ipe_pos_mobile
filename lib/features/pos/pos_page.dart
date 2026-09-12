@@ -601,28 +601,12 @@ class _PosPageState extends State<PosPage> {
       appBar: AppBar(
         title: const Text('Kasir POS'),
         actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.qr_code_scanner_rounded),
-          //   tooltip: 'Input Kode QR Manual',
-          //   onPressed: _openScanQrDialog,
-          // ),
-          // IconButton(
-          //   icon: const Icon(Icons.camera_alt_rounded),
-          //   tooltip: 'Scan QR Stok Kamera',
-          //   onPressed: _openDirectCameraScanner,
-          // ),
           if (_cartItems.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep_rounded),
               tooltip: 'Kosongkan Keranjang',
               onPressed: _clearCart,
             ),
-          // IconButton(
-          //   icon: const Icon(Icons.print_outlined),
-          //   tooltip: 'Pengaturan Printer',
-          //   onPressed: () =>
-          //       Navigator.of(context).pushNamed(AppRoutes.printerSettings),
-          // ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Muat Ulang',
@@ -639,35 +623,36 @@ class _PosPageState extends State<PosPage> {
                   // Scrollable POS Content
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: AppSizes.paddingPage,
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSizes.md,
+                        AppSizes.md,
+                        AppSizes.md,
+                        8,
+                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. Info Cabang & Gudang
-                          // _buildLocationCard(),
-                          // AppSizes.gapH16,
-
-                          // 2. Tombol Aksi: Scan QR Stok & Katalog Produk
+                          // 1. Tombol Aksi Kasir: Scan QR Barang & Input Manual Kode & Katalog
                           _buildActionButtons(totalItemsCount),
-                          AppSizes.gapH20,
+                          const SizedBox(height: 10),
 
-                          // 3. Section Daftar Item di Keranjang
+                          // 2. Section Daftar Barang Keranjang
                           _buildCartSection(),
-                          AppSizes.gapH20,
+                          const SizedBox(height: 12),
+
+                          // 3. Section Pilihan Metode Pembayaran
+                          _buildPaymentMethodSection(),
+                          const SizedBox(height: 12),
 
                           // 4. Section Promo Diskon
                           if (_promos.isNotEmpty) ...[
                             _buildPromoSection(),
-                            AppSizes.gapH20,
+                            const SizedBox(height: 12),
                           ],
 
-                          // 5. Section Metode Pembayaran
-                          _buildPaymentMethodSection(),
-                          AppSizes.gapH20,
-
-                          // 6. Rincian Tagihan & Input Uang Tunai
+                          // 5. Section Ringkasan Perhitungan & Pembayaran
                           _buildFinancialSummarySection(),
-                          AppSizes.gapH24,
+                          const SizedBox(height: 16),
                         ],
                       ),
                     ),
@@ -677,41 +662,6 @@ class _PosPageState extends State<PosPage> {
                   _buildBottomCheckoutBar(grandTotal),
                 ],
               ),
-      ),
-    );
-  }
-
-  Widget _buildLocationCard() {
-    final branchName = _defaultBranch?.name ?? 'Cabang Aktif';
-    final warehouseName = _defaultWarehouse?.name ?? 'Gudang Utama';
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-      ),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.storefront_rounded,
-            color: AppColors.primary,
-            size: 22,
-          ),
-          AppSizes.gapW12,
-          Expanded(
-            child: Text(
-              '$branchName  •  $warehouseName',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

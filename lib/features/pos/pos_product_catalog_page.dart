@@ -7,7 +7,6 @@ import '../../core/models/pos_models.dart';
 import '../../core/services/api_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/camera_scanner_page.dart';
-import 'widgets/scan_qr_dialog.dart';
 import 'widgets/stock_qty_confirm_dialog.dart';
 
 class PosProductCatalogPage extends StatefulWidget {
@@ -260,20 +259,6 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     }
   }
 
-  // ignore: unused_element
-  void _openScanQrDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => ScanQrDialog(
-        warehouseId: widget.warehouseId,
-        branchId: widget.branchId,
-        onProductFound: (product, qrcode, qty) {
-          _addToCart(product, qrcode: qrcode, qty: qty);
-        },
-      ),
-    );
-  }
-
   int get _totalCartCount =>
       widget.cartItems.fold(0, (sum, item) => sum + item.qty);
 
@@ -286,16 +271,6 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       appBar: AppBar(
         title: const Text('Katalog Produk POS'),
         actions: [
-          // IconButton(
-          //   icon: const Icon(Icons.camera_alt_rounded),
-          //   tooltip: 'Kamera Scanner Barcode',
-          //   onPressed: _openDirectCameraScanner,
-          // ),
-          // IconButton(
-          //   icon: const Icon(Icons.qr_code_scanner_rounded),
-          //   tooltip: 'Input / Scan Kode',
-          //   onPressed: _openScanQrDialog,
-          // ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Muat Ulang',

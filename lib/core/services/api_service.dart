@@ -405,8 +405,8 @@ class ApiService {
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
   }
 
-  /// Scan QR Code / Barcode to retrieve product & stock
-  static Future<ApiResponse<ProductModel>> scanQr({
+  /// Search products by QR code (supporting multiple suffix matches, e.g. last 3 digits)
+  static Future<ApiResponse<List<ProductModel>>> searchByQrCode({
     required String qrcode,
     int? warehouseId,
     int? branchId,
@@ -423,11 +423,70 @@ class ApiService {
     if (branchId != null) body['branch_id'] = branchId;
 
     final res = await post(ApiConfig.posScanQr, body: body);
-    if (res.isSuccess && res.data is Map<String, dynamic>) {
-      final product = ProductModel.fromJson(res.data as Map<String, dynamic>);
-      return ApiResponse.success(data: product, message: res.message);
+    if (res.isSuccess) {
+      final list = <ProductModel>[];
+      if (res.data is List) {
+        for (final item in res.data as List) {
+          if (item is Map<String, dynamic>) {
+            list.add(ProductModel.fromJson(item));
+          }
+        }
+      } else if (res.data is Map<String, dynamic>) {
+        final map = res.data as Map<String, dynamic>;
+        final items = map['products'] ?? map['data'] ?? map['items'];
+        if (items is List) {
+          for (final item in items) {
+            if (item is Map<String, dynamic>) {
+              list.add(ProductModel.fromJson(item));
+            }
+          }
+        } else if (map.containsKey('name') ||
+            map.containsKey('id') ||
+            map.containsKey('item_name') ||
+            map.containsKey('stock_id')) {
+          list.add(ProductModel.fromJson(map));
+        }
+      }
+
+      // Sort results so items whose qrcode ends with the search string appear first (suffix matching)
+      final lowerQr = cleanQr.toLowerCase();
+      list.sort((a, b) {
+        final aQr = a.qrcode?.toLowerCase() ?? '';
+        final bQr = b.qrcode?.toLowerCase() ?? '';
+        final aEnds = aQr.endsWith(lowerQr);
+        final bEnds = bQr.endsWith(lowerQr);
+        if (aEnds && !bEnds) return -1;
+        if (!aEnds && bEnds) return 1;
+        return 0;
+      });
+
+      return ApiResponse.success(data: list, message: res.message);
     }
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
+  }
+
+  /// Scan QR Code / Barcode to retrieve single product & stock
+  static Future<ApiResponse<ProductModel>> scanQr({
+    required String qrcode,
+    int? warehouseId,
+    int? branchId,
+  }) async {
+    final listRes = await searchByQrCode(
+      qrcode: qrcode,
+      warehouseId: warehouseId,
+      branchId: branchId,
+    );
+    if (listRes.isSuccess && listRes.data != null && listRes.data!.isNotEmpty) {
+      final exact = listRes.data!.firstWhere(
+        (p) => p.qrcode?.toLowerCase() == qrcode.trim().toLowerCase(),
+        orElse: () => listRes.data!.first,
+      );
+      return ApiResponse.success(data: exact, message: listRes.message);
+    }
+    return ApiResponse.error(
+      message: listRes.message.isNotEmpty ? listRes.message : 'Produk tidak ditemukan.',
+      statusCode: listRes.statusCode,
+    );
   }
 
   /// Save POS Cashier Invoice / Transaction

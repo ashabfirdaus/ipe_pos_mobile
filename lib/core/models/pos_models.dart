@@ -157,12 +157,35 @@ class PromoModel {
   });
 
   factory PromoModel.fromJson(Map<String, dynamic> json) {
+    // Backend Laravel uses promo_type: 1 (percentage), 2 (bundle / fixed)
+    // and discount_percentage or discount_value
+    final rawType = json['promo_type']?.toString() ??
+        json['discount_type']?.toString() ??
+        json['type']?.toString();
+
+    final hasDiscountPercentage = json['discount_percentage'] != null &&
+        (double.tryParse(json['discount_percentage'].toString()) ?? 0.0) > 0;
+
+    final isPercentage = rawType == '1' ||
+        rawType?.toLowerCase() == 'percentage' ||
+        rawType?.toLowerCase() == 'percent' ||
+        hasDiscountPercentage;
+
+    final discountVal = double.tryParse(
+          json['discount_percentage']?.toString() ??
+              json['discount_value']?.toString() ??
+              json['discount']?.toString() ??
+              json['value']?.toString() ??
+              '0',
+        ) ??
+        0.0;
+
     return PromoModel(
       id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
       name: json['name']?.toString() ?? json['promo_name']?.toString() ?? 'Promo',
       code: json['code']?.toString() ?? json['promo_code']?.toString(),
-      discountType: json['discount_type']?.toString() ?? json['type']?.toString() ?? 'fixed',
-      discountValue: double.tryParse(json['discount_value']?.toString() ?? json['discount']?.toString() ?? '0') ?? 0.0,
+      discountType: isPercentage ? 'percentage' : 'fixed',
+      discountValue: discountVal,
     );
   }
 }

@@ -33,6 +33,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.2"
+  change_app_package_name_plus:
+    dependency: "direct dev"
+    description:
+      name: change_app_package_name_plus
+      sha256: "8851098713f3c7b660f987d40189b279b1e4b72fe5af7fea7e6ac9cefe370166"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.6.0"
   characters:
     dependency: transitive
     description:

@@ -109,7 +109,6 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     }
   }
 
-  // ignore: unused_element
   void _showVoidDialog() {
     final reasonController = TextEditingController();
     showDialog(
@@ -302,20 +301,20 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     AppSizes.gapH12,
 
                     // Void Button if Active
-                    // if (_invoice!.status == 1)
-                    //   SizedBox(
-                    //     width: double.infinity,
-                    //     height: 48,
-                    //     child: OutlinedButton.icon(
-                    //       style: OutlinedButton.styleFrom(
-                    //         foregroundColor: AppColors.error,
-                    //         side: const BorderSide(color: AppColors.error),
-                    //       ),
-                    //       icon: const Icon(Icons.cancel_outlined),
-                    //       label: const Text('Batalkan Transaksi (Void)'),
-                    //       onPressed: _showVoidDialog,
-                    //     ),
-                    //   ),
+                    if (_invoice!.status == 1)
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.error,
+                            side: const BorderSide(color: AppColors.error),
+                          ),
+                          icon: const Icon(Icons.cancel_outlined),
+                          label: const Text('Batalkan Transaksi (Void)'),
+                          onPressed: _showVoidDialog,
+                        ),
+                      ),
                     AppSizes.gapH24,
                   ],
                 ),

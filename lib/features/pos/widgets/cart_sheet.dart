@@ -37,27 +37,29 @@ class CartSheet extends StatefulWidget {
 class _CartSheetState extends State<CartSheet> {
   late int _selectedPaymentMethodId;
   PromoModel? _selectedPromo;
-  final _cashController = TextEditingController();
   bool _isProcessing = false;
+
+  List<PaymentMethodModel> get _nonCashPaymentMethods {
+    return widget.paymentMethods.where((pm) {
+      final n = pm.name.toLowerCase();
+      final c = (pm.code ?? '').toLowerCase();
+      final t = (pm.type ?? '').toLowerCase();
+      return !n.contains('cash') &&
+          !n.contains('tunai') &&
+          !c.contains('cash') &&
+          !c.contains('tunai') &&
+          !t.contains('cash') &&
+          !t.contains('tunai');
+    }).toList();
+  }
 
   @override
   void initState() {
     super.initState();
-    _selectedPaymentMethodId = widget.paymentMethods.isNotEmpty
-        ? widget.paymentMethods.first.id
-        : 1;
-    _setDefaultCash();
-  }
-
-  @override
-  void dispose() {
-    _cashController.dispose();
-    super.dispose();
-  }
-
-  void _setDefaultCash() {
-    final grandTotal = _calculateGrandTotal();
-    _cashController.text = grandTotal.toStringAsFixed(0);
+    final methods = _nonCashPaymentMethods;
+    _selectedPaymentMethodId = methods.isNotEmpty
+        ? methods.first.id
+        : 2;
   }
 
   double _calculateSubTotal() {
@@ -87,34 +89,12 @@ class _CartSheetState extends State<CartSheet> {
     return (subTotal - discount + ppn).clamp(0.0, double.infinity);
   }
 
-  double _getCashAmount() {
-    return double.tryParse(_cashController.text.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0.0;
-  }
-
-  double _calculateChange() {
-    final cash = _getCashAmount();
-    final grandTotal = _calculateGrandTotal();
-    final diff = cash - grandTotal;
-    return diff > 0 ? diff : 0.0;
-  }
-
   Future<void> _handleCheckout() async {
     final grandTotal = _calculateGrandTotal();
-    final cash = _getCashAmount();
 
     if (widget.cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Keranjang belanja masih kosong!')),
-      );
-      return;
-    }
-
-    if (cash < grandTotal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nominal uang tunai kurang dari Grand Total!'),
-          backgroundColor: AppColors.error,
-        ),
       );
       return;
     }
@@ -133,8 +113,8 @@ class _CartSheetState extends State<CartSheet> {
       'discount': _calculateDiscount(),
       'ppn': _calculatePpn(),
       'grand_total': grandTotal,
-      'cash': cash,
-      'change': _calculateChange(),
+      'cash': grandTotal,
+      'change': 0.0,
       if (_selectedPromo != null) 'promo_id': _selectedPromo!.id,
       'items': itemsPayload,
       'details': itemsPayload,
@@ -208,7 +188,6 @@ class _CartSheetState extends State<CartSheet> {
     final discount = _calculateDiscount();
     final ppn = _calculatePpn();
     final grandTotal = _calculateGrandTotal();
-    final change = _calculateChange();
 
     return Container(
       height: MediaQuery.of(context).size.height * 0.88,
@@ -298,7 +277,6 @@ class _CartSheetState extends State<CartSheet> {
                                     }
                                   });
                                   widget.onCartUpdated();
-                                  _setDefaultCash();
                                 },
                               ),
                               Padding(
@@ -318,7 +296,6 @@ class _CartSheetState extends State<CartSheet> {
                                       item.qty++;
                                     });
                                     widget.onCartUpdated();
-                                    _setDefaultCash();
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Batas stok tercapai')),
@@ -384,7 +361,6 @@ class _CartSheetState extends State<CartSheet> {
                       setState(() {
                         _selectedPromo = val;
                       });
-                      _setDefaultCash();
                     },
                   ),
                   AppSizes.gapH8,
@@ -394,7 +370,7 @@ class _CartSheetState extends State<CartSheet> {
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: widget.paymentMethods.map((pm) {
+                    children: _nonCashPaymentMethods.map((pm) {
                       final isSelected = _selectedPaymentMethodId == pm.id;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8),
@@ -429,47 +405,6 @@ class _CartSheetState extends State<CartSheet> {
                   _buildSummaryRow('PPN (${widget.ppnRate.toStringAsFixed(0)}%)', CurrencyFormatter.format(ppn)),
                 const Divider(height: 12),
                 _buildSummaryRow('Grand Total', CurrencyFormatter.format(grandTotal), isBold: true, fontSize: 16),
-                AppSizes.gapH8,
-
-                // Cash Input & Quick Buttons
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: _cashController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Uang Diterima (Rp)',
-                          prefixText: 'Rp ',
-                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          border: OutlineInputBorder(),
-                        ),
-                        onChanged: (val) => setState(() {}),
-                      ),
-                    ),
-                    AppSizes.gapW8,
-                    Expanded(
-                      flex: 2,
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        onPressed: _setDefaultCash,
-                        child: const Text('Uang Pas', style: TextStyle(fontSize: 12)),
-                      ),
-                    ),
-                  ],
-                ),
-                AppSizes.gapH8,
-
-                // Change / Kembalian Row
-                _buildSummaryRow(
-                  'Kembalian',
-                  CurrencyFormatter.format(change),
-                  isBold: true,
-                  color: change >= 0 ? AppColors.primary : AppColors.error,
-                ),
                 AppSizes.gapH12,
 
                 // Submit Checkout Button

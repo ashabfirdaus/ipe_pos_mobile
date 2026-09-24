@@ -37,7 +37,6 @@ class _PosPageState extends State<PosPage> {
   final List<CartItemModel> _cartItems = [];
   late int _selectedPaymentMethodId;
   PromoModel? _selectedPromo;
-  final TextEditingController _cashController = TextEditingController();
 
   @override
   void initState() {
@@ -48,7 +47,6 @@ class _PosPageState extends State<PosPage> {
 
   @override
   void dispose() {
-    _cashController.dispose();
     super.dispose();
   }
 
@@ -66,28 +64,37 @@ class _PosPageState extends State<PosPage> {
       _selectedBranchId = initData.defaultBranch?.id;
       _selectedWarehouseId = initData.defaultWarehouse?.id;
 
-      _paymentMethods = initData.paymentMethods.isNotEmpty
-          ? initData.paymentMethods
-          : [PaymentMethodModel(id: 1, name: 'Tunai (Cash)')];
+      final nonCashMethods = initData.paymentMethods.where((pm) {
+        final n = pm.name.toLowerCase();
+        final c = (pm.code ?? '').toLowerCase();
+        final t = (pm.type ?? '').toLowerCase();
+        return !n.contains('cash') &&
+            !n.contains('tunai') &&
+            !c.contains('cash') &&
+            !c.contains('tunai') &&
+            !t.contains('cash') &&
+            !t.contains('tunai');
+      }).toList();
+
+      _paymentMethods = nonCashMethods.isNotEmpty
+          ? nonCashMethods
+          : [
+              PaymentMethodModel(id: 2, name: 'QRIS'),
+              PaymentMethodModel(id: 3, name: 'Transfer Bank'),
+            ];
 
       _selectedPaymentMethodId = _paymentMethods.first.id;
       _promos = initData.promos;
       _ppnRate = initData.ppnRate;
     } else {
       _paymentMethods = [
-        PaymentMethodModel(id: 1, name: 'Tunai (Cash)'),
         PaymentMethodModel(id: 2, name: 'QRIS'),
+        PaymentMethodModel(id: 3, name: 'Transfer Bank'),
       ];
-      _selectedPaymentMethodId = 1;
+      _selectedPaymentMethodId = 2;
     }
 
     setState(() => _isLoadingInitial = false);
-    _updateDefaultCash();
-  }
-
-  void _updateDefaultCash() {
-    final grandTotal = _calculateGrandTotal();
-    _cashController.text = grandTotal.toStringAsFixed(0);
   }
 
   double _calculateSubTotal() {
@@ -117,23 +124,8 @@ class _PosPageState extends State<PosPage> {
     return (subTotal - discount + ppn).clamp(0.0, double.infinity);
   }
 
-  double _getCashAmount() {
-    return double.tryParse(
-          _cashController.text.replaceAll(RegExp(r'[^0-9]'), ''),
-        ) ??
-        0.0;
-  }
-
-  double _calculateChange() {
-    final cash = _getCashAmount();
-    final grandTotal = _calculateGrandTotal();
-    final diff = cash - grandTotal;
-    return diff > 0 ? diff : 0.0;
-  }
-
   void _onCartChanged() {
     setState(() {});
-    _updateDefaultCash();
   }
 
   Future<void> _openProductCatalog() async {
@@ -149,7 +141,6 @@ class _PosPageState extends State<PosPage> {
 
     if (!mounted) return;
     setState(() {});
-    _updateDefaultCash();
   }
 
   Future<void> _openDirectCameraScanner() async {
@@ -438,7 +429,6 @@ class _PosPageState extends State<PosPage> {
 
   Future<void> _handleCheckout() async {
     final grandTotal = _calculateGrandTotal();
-    final cash = _getCashAmount();
 
     if (_cartItems.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -472,16 +462,6 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
-    if (cash < grandTotal) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Nominal uang tunai kurang dari Grand Total!'),
-          backgroundColor: AppColors.error,
-        ),
-      );
-      return;
-    }
-
     setState(() => _isProcessingCheckout = true);
 
     final itemsPayload = _cartItems
@@ -496,8 +476,8 @@ class _PosPageState extends State<PosPage> {
       'discount': _calculateDiscount(),
       'ppn': _calculatePpn(),
       'grand_total': grandTotal,
-      'cash': cash,
-      'change': _calculateChange(),
+      'cash': grandTotal,
+      'change': 0.0,
       if (_selectedPromo != null) 'promo_id': _selectedPromo!.id,
       'items': itemsPayload,
       'details': itemsPayload,
@@ -560,17 +540,16 @@ class _PosPageState extends State<PosPage> {
         invoice = invoice.copyWith(grandTotal: grandTotal);
       }
       if (invoice.cash == 0) {
-        invoice = invoice.copyWith(cash: cash);
+        invoice = invoice.copyWith(cash: grandTotal);
       }
       if (invoice.change == 0) {
-        invoice = invoice.copyWith(change: _calculateChange());
+        invoice = invoice.copyWith(change: 0.0);
       }
 
       setState(() {
         _cartItems.clear();
         _selectedPromo = null;
       });
-      _updateDefaultCash();
 
       // Tampilkan struk nota dialog dengan opsi cetak ke printer Bluetooth
       showDialog(
@@ -826,7 +805,7 @@ class _PosPageState extends State<PosPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _cartItems.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = _cartItems[index];
                 return _buildCartItemTile(item, index);
@@ -1125,7 +1104,6 @@ class _PosPageState extends State<PosPage> {
                   setState(() {
                     _selectedPromo = val;
                   });
-                  _updateDefaultCash();
                 },
               ),
             ),
@@ -1208,7 +1186,10 @@ class _PosPageState extends State<PosPage> {
               avatar: Icon(
                 pm.name.toLowerCase().contains('qris')
                     ? Icons.qr_code_2_rounded
-                    : Icons.money_rounded,
+                    : (pm.name.toLowerCase().contains('transfer') ||
+                            pm.name.toLowerCase().contains('bank')
+                        ? Icons.account_balance_rounded
+                        : Icons.credit_card_rounded),
                 size: 18,
                 color: isSelected ? Colors.white : AppColors.primary,
               ),
@@ -1238,7 +1219,6 @@ class _PosPageState extends State<PosPage> {
     final discount = _calculateDiscount();
     final ppn = _calculatePpn();
     final grandTotal = _calculateGrandTotal();
-    final change = _calculateChange();
 
     return Card(
       elevation: 2,
@@ -1280,41 +1260,6 @@ class _PosPageState extends State<PosPage> {
               CurrencyFormatter.format(grandTotal),
               isBold: true,
               fontSize: 16,
-            ),
-            AppSizes.gapH16,
-
-            // Input Uang Tunai Diterima
-            const Text(
-              'Uang Diterima:',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            ),
-            AppSizes.gapH8,
-            TextField(
-              controller: _cashController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                prefixText: 'Rp ',
-                hintText: '0',
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _cashController.clear();
-                    setState(() {});
-                  },
-                ),
-              ),
-              onChanged: (_) => setState(() {}),
-            ),
-
-            const Divider(height: 24),
-
-            // Kembalian
-            _buildFinancialRow(
-              'Kembalian',
-              CurrencyFormatter.format(change),
-              isBold: true,
-              color: AppColors.primary,
-              fontSize: 15,
             ),
           ],
         ),

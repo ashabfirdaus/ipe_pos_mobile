@@ -64,14 +64,12 @@ class ApiService {
       final uri = _buildUri(endpoint, queryParams);
       final headers = await _getHeaders(requiresAuth: requiresAuth);
 
-      debugPrint('[ApiService GET] $uri');
       final response = await _client
           .get(uri, headers: headers)
           .timeout(ApiConfig.connectTimeout);
 
       return _processResponse(response, requiresAuth: requiresAuth);
-    } on SocketException catch (e) {
-      debugPrint('[ApiService Error] SocketException: $e');
+    } on SocketException {
       return ApiResponse.error(
         message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Pastikan IP dan port server benar.',
         statusCode: 503,
@@ -82,7 +80,6 @@ class ApiService {
         statusCode: 408,
       );
     } catch (e) {
-      debugPrint('[ApiService Error] $e');
       return ApiResponse.error(
         message: 'Terjadi kesalahan: ${e.toString()}',
         statusCode: 500,
@@ -101,14 +98,12 @@ class ApiService {
       final headers = await _getHeaders(requiresAuth: requiresAuth);
       final encodedBody = body != null ? jsonEncode(body) : null;
 
-      debugPrint('[ApiService POST] $uri | Body: $encodedBody');
       final response = await _client
           .post(uri, headers: headers, body: encodedBody)
           .timeout(ApiConfig.connectTimeout);
 
       return _processResponse(response, requiresAuth: requiresAuth);
-    } on SocketException catch (e) {
-      debugPrint('[ApiService Error] SocketException: $e');
+    } on SocketException {
       return ApiResponse.error(
         message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Periksa jaringan atau IP server.',
         statusCode: 503,
@@ -119,7 +114,6 @@ class ApiService {
         statusCode: 408,
       );
     } catch (e) {
-      debugPrint('[ApiService Error] $e');
       return ApiResponse.error(
         message: 'Terjadi kesalahan: ${e.toString()}',
         statusCode: 500,
@@ -154,8 +148,7 @@ class ApiService {
             );
           }
         }
-      } catch (e) {
-        debugPrint('[ApiService] Gagal auto-logout: $e');
+      } catch (_) {
       } finally {
         await Future.delayed(const Duration(seconds: 1));
         _isLoggingOut = false;
@@ -168,7 +161,6 @@ class ApiService {
     http.Response response, {
     bool requiresAuth = true,
   }) {
-    debugPrint('[ApiService Response ${response.statusCode}] ${response.body}');
     dynamic json;
     try {
       json = jsonDecode(response.body);
@@ -187,7 +179,6 @@ class ApiService {
         ));
 
     if (requiresAuth && isUnauthenticated) {
-      debugPrint('[ApiService] Respon Unauthenticated terdeteksi! Langsung logout...');
       handleUnauthenticated();
       return ApiResponse.error(
         message: 'Sesi telah berakhir (Unauthenticated). Silakan masuk kembali.',

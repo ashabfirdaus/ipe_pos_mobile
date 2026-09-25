@@ -256,6 +256,25 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                       ],
                     ),
                   ],
+                  if (isVoid && inv.voidByName != null && inv.voidByName!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 3),
+                    Row(
+                      children: [
+                        const Icon(Icons.cancel_outlined, size: 13, color: AppColors.error),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            'Void oleh: ${inv.voidByName}',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.error,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   AppSizes.gapH6,
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

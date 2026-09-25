@@ -7,6 +7,7 @@ class UserModel {
   final String username;
   final String? email;
   final String? role;
+  final bool canVoid;
 
   UserModel({
     required this.id,
@@ -14,6 +15,7 @@ class UserModel {
     required this.username,
     this.email,
     this.role,
+    this.canVoid = false,
   });
 
   String get roleName => _extractRoleName(role);
@@ -46,6 +48,10 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) {
     final roleValue = json['role_name'] ?? json['role'] ?? json['roles'];
     final parsedRole = _extractRoleName(roleValue);
+    final bool canVoid = json['can_void'] == true ||
+        json['can_void'] == 1 ||
+        json['can_void']?.toString() == '1' ||
+        json['can_void']?.toString().toLowerCase() == 'true';
 
     return UserModel(
       id: json['id'],
@@ -53,6 +59,7 @@ class UserModel {
       username: json['username']?.toString() ?? '',
       email: json['email']?.toString(),
       role: parsedRole,
+      canVoid: canVoid,
     );
   }
 
@@ -63,6 +70,7 @@ class UserModel {
     'email': email,
     'role': roleName,
     'role_name': roleName,
+    'can_void': canVoid,
   };
 }
 
@@ -283,11 +291,16 @@ class ProductModel {
   final String? code;
   final String? barcode;
   final double price;
-  final double stock;
+  double stock;
+  final double qrStock;
   final String? unit;
   final String? categoryName;
   final String? imagePath;
   final String? qrcode;
+  final bool isKardus;
+  final String? qrType;
+  final String? wrapperQrcode;
+  final List<String> containedQrcodes;
 
   ProductModel({
     required this.id,
@@ -297,10 +310,15 @@ class ProductModel {
     this.barcode,
     required this.price,
     required this.stock,
+    this.qrStock = 1.0,
     this.unit,
     this.categoryName,
     this.imagePath,
     this.qrcode,
+    this.isKardus = false,
+    this.qrType,
+    this.wrapperQrcode,
+    this.containedQrcodes = const [],
   });
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
@@ -330,10 +348,11 @@ class ProductModel {
                 '0',
           ) ??
           0.0,
+      qrStock: double.tryParse(json['remaining_qty']?.toString() ?? '1') ?? 1.0,
       stock: double.tryParse(
-            json['remaining_qty']?.toString() ??
+            json['total_stock']?.toString() ??
                 json['stock']?.toString() ??
-                json['total_stock']?.toString() ??
+                json['remaining_qty']?.toString() ??
                 json['qty']?.toString() ??
                 '0',
           ) ??
@@ -352,6 +371,18 @@ class ProductModel {
         return raw.startsWith('/') ? '$base$raw' : '$base/$raw';
       }(),
       qrcode: json['qrcode']?.toString(),
+      isKardus: json['is_kardus'] == true ||
+          json['qr_type']?.toString().toLowerCase() == 'kardus',
+      qrType: json['qr_type']?.toString() ??
+          (json['is_kardus'] == true ? 'kardus' : 'satuan'),
+      wrapperQrcode: json['wrapper_qrcode']?.toString(),
+      containedQrcodes: () {
+        final rawList = json['contained_qrcodes'];
+        if (rawList is List) {
+          return rawList.map((e) => e.toString()).toList();
+        }
+        return <String>[];
+      }(),
     );
   }
 }
@@ -361,31 +392,98 @@ class CartItemModel {
   int qty;
   double price;
   double discount;
-  String qrcode;
+  final List<String> qrcodes;
+  final List<String> wrapperQrcodes;
 
   CartItemModel({
     required this.product,
     this.qty = 1,
     required this.price,
     this.discount = 0,
-    this.qrcode = '',
-  });
+    String qrcode = '',
+    List<String>? qrcodes,
+    List<String>? wrapperQrcodes,
+  })  : qrcodes = qrcodes != null
+            ? List<String>.from(qrcodes)
+            : (!product.isKardus && qrcode.isNotEmpty ? [qrcode] : <String>[]),
+        wrapperQrcodes = wrapperQrcodes != null
+            ? List<String>.from(wrapperQrcodes)
+            : (product.isKardus
+                ? (qrcode.isNotEmpty
+                    ? [qrcode]
+                    : (product.wrapperQrcode != null && product.wrapperQrcode!.isNotEmpty
+                        ? [product.wrapperQrcode!]
+                        : (product.qrcode != null && product.qrcode!.isNotEmpty
+                            ? [product.qrcode!]
+                            : <String>[])))
+                : <String>[]);
+
+  bool get isKardus => product.isKardus;
+
+  List<String> get activeCodes => isKardus ? wrapperQrcodes : qrcodes;
+
+  String get qrcode => activeCodes.isNotEmpty ? activeCodes.first : '';
+  set qrcode(String val) {
+    if (val.isEmpty) {
+      activeCodes.clear();
+    } else {
+      if (!activeCodes.contains(val)) {
+        activeCodes.add(val);
+      }
+    }
+  }
 
   double get subTotal => (price * qty) - discount;
 
   Map<String, dynamic> toInvoiceItemJson() {
-    final finalQr = qrcode.isNotEmpty ? qrcode : product.qrcode;
-    return {
-      'item_id': product.itemId,
-      'item_name': product.name,
-      'qty': qty,
-      'price': price,
-      'discount': discount,
-      'sub_total': subTotal,
-      'qrcode': finalQr != null && finalQr.isNotEmpty ? finalQr : null,
-      if (product.unit != null) 'unit': product.unit,
-      if (product.code != null) 'code': product.code,
-    };
+    if (isKardus) {
+      final List<String> finalWrapperQrs = wrapperQrcodes.isNotEmpty
+          ? wrapperQrcodes
+          : (product.wrapperQrcode != null && product.wrapperQrcode!.isNotEmpty
+              ? [product.wrapperQrcode!]
+              : (product.qrcode != null && product.qrcode!.isNotEmpty
+                  ? [product.qrcode!]
+                  : <String>[]));
+      final joinedWrapperQr =
+          finalWrapperQrs.isNotEmpty ? finalWrapperQrs.join(', ') : null;
+
+      return {
+        'item_id': product.itemId,
+        'item_name': product.name,
+        'qty': qty,
+        'price': price,
+        'discount': discount,
+        'sub_total': subTotal,
+        'is_kardus': true,
+        'qrcode': null, // Tidak termasuk di qrcode ketika yang discan kardus
+        'wrapper_qrcode': joinedWrapperQr,
+        'wrapper_qrcodes': finalWrapperQrs,
+        if (product.unit != null) 'unit': product.unit,
+        if (product.code != null) 'code': product.code,
+      };
+    } else {
+      final List<String> finalQrs = qrcodes.isNotEmpty
+          ? qrcodes
+          : (product.qrcode != null && product.qrcode!.isNotEmpty
+              ? [product.qrcode!]
+              : <String>[]);
+      final joinedQr = finalQrs.isNotEmpty ? finalQrs.join(', ') : null;
+
+      return {
+        'item_id': product.itemId,
+        'item_name': product.name,
+        'qty': qty,
+        'price': price,
+        'discount': discount,
+        'sub_total': subTotal,
+        'is_kardus': false,
+        'qrcode': joinedQr,
+        'qrcodes': finalQrs,
+        'wrapper_qrcode': null,
+        if (product.unit != null) 'unit': product.unit,
+        if (product.code != null) 'code': product.code,
+      };
+    }
   }
 }
 
@@ -397,6 +495,7 @@ class InvoiceItemModel {
   final double discount;
   final double subTotal;
   final String? qrcode;
+  final String? wrapperQrcode;
   final String? unit;
   final String? itemCode;
 
@@ -408,6 +507,7 @@ class InvoiceItemModel {
     required this.discount,
     required this.subTotal,
     this.qrcode,
+    this.wrapperQrcode,
     this.unit,
     this.itemCode,
   });
@@ -429,6 +529,7 @@ class InvoiceItemModel {
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
       qrcode: json['qrcode']?.toString(),
+      wrapperQrcode: json['wrapper_qrcode']?.toString(),
       unit: json['unit_measure_name']?.toString() ??
           unitObj?['unit_measure_name']?.toString() ??
           (json['unit'] is String ? json['unit']?.toString() : null) ??
@@ -457,6 +558,7 @@ class InvoiceModel {
   final double change;
   final String? voidDesc;
   final String? voidAt;
+  final String? voidByName;
   final String? cashierName;
   final List<InvoiceItemModel> items;
 
@@ -478,6 +580,7 @@ class InvoiceModel {
     required this.change,
     this.voidDesc,
     this.voidAt,
+    this.voidByName,
     this.items = const [],
   });
 
@@ -499,6 +602,7 @@ class InvoiceModel {
     double? change,
     String? voidDesc,
     String? voidAt,
+    String? voidByName,
     List<InvoiceItemModel>? items,
   }) {
     return InvoiceModel(
@@ -519,6 +623,7 @@ class InvoiceModel {
       change: change ?? this.change,
       voidDesc: voidDesc ?? this.voidDesc,
       voidAt: voidAt ?? this.voidAt,
+      voidByName: voidByName ?? this.voidByName,
       items: items ?? this.items,
     );
   }
@@ -560,6 +665,19 @@ class InvoiceModel {
         (json['created_by'] is String ? json['created_by']?.toString() : null) ??
         json['created_by_name']?.toString();
 
+    final voidByObj = json['void_by'] is Map<String, dynamic>
+        ? json['void_by'] as Map<String, dynamic>
+        : (json['voidBy'] is Map<String, dynamic>
+            ? json['voidBy'] as Map<String, dynamic>
+            : (json['void_by_user'] is Map<String, dynamic>
+                ? json['void_by_user'] as Map<String, dynamic>
+                : null));
+
+    final parsedVoidByName = json['void_by_name']?.toString() ??
+        voidByObj?['name']?.toString() ??
+        voidByObj?['username']?.toString() ??
+        (json['void_by'] is String ? json['void_by']?.toString() : null);
+
     return InvoiceModel(
       id: json['id'],
       invoiceNo: json['pos_invoice_code']?.toString() ??
@@ -587,6 +705,7 @@ class InvoiceModel {
       change: double.tryParse(json['change']?.toString() ?? '0') ?? 0.0,
       voidDesc: json['void_desc']?.toString(),
       voidAt: json['void_date']?.toString() ?? json['void_at']?.toString(),
+      voidByName: parsedVoidByName,
       items: itemList,
     );
   }

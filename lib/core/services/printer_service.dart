@@ -113,8 +113,7 @@ class PrinterService {
       }
 
       return isBtOn;
-    } catch (e) {
-      debugPrint('Error checking bluetooth enabled: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -123,7 +122,6 @@ class PrinterService {
   Future<List<BluetoothInfo>> getPairedDevices() async {
     final hasPermission = await checkAndRequestPermissions();
     if (!hasPermission) {
-      debugPrint('Bluetooth permission not granted');
       return [];
     }
 
@@ -131,8 +129,7 @@ class PrinterService {
       final List<BluetoothInfo> devices =
           await PrintBluetoothThermal.pairedBluetooths;
       return devices;
-    } catch (e) {
-      debugPrint('Error getting paired devices: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -177,8 +174,7 @@ class PrinterService {
         }
       }
       return result;
-    } catch (e) {
-      debugPrint('Error connecting to printer: $e');
+    } catch (_) {
       _isConnected = false;
       return false;
     }
@@ -190,8 +186,7 @@ class PrinterService {
       final bool result = await PrintBluetoothThermal.disconnect;
       _isConnected = false;
       return result;
-    } catch (e) {
-      debugPrint('Error disconnecting printer: $e');
+    } catch (_) {
       return false;
     }
   }
@@ -244,8 +239,7 @@ class PrinterService {
       }
 
       return generator.imageRaster(prepared, align: PosAlign.center);
-    } catch (e) {
-      debugPrint('Gagal memuat logo Inti Pangan untuk cetak nota: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -349,8 +343,10 @@ class PrinterService {
           fontType: PosFontType.fontB,
         ),
       );
-      bytes += generator.feed(2);
-      bytes += generator.cut();
+      bytes += generator.feed(1);
+      if (_paperSize == '80') {
+        bytes += [29, 86, 66, 0];
+      }
 
       final printResult = await PrintBluetoothThermal.writeBytes(bytes);
       return (
@@ -430,10 +426,14 @@ class PrinterService {
         styles: const PosStyles(fontType: PosFontType.fontB),
       );
       String? effectiveCashier = cashierName;
-      if (effectiveCashier == null || effectiveCashier.trim().isEmpty || effectiveCashier == '-') {
+      if (effectiveCashier == null ||
+          effectiveCashier.trim().isEmpty ||
+          effectiveCashier == '-') {
         effectiveCashier = invoice.cashierName;
       }
-      if (effectiveCashier == null || effectiveCashier.trim().isEmpty || effectiveCashier == '-') {
+      if (effectiveCashier == null ||
+          effectiveCashier.trim().isEmpty ||
+          effectiveCashier == '-') {
         effectiveCashier = await StorageService.getCashierName();
       }
       if (effectiveCashier != null && effectiveCashier.trim().isNotEmpty) {
@@ -609,8 +609,12 @@ class PrinterService {
         ),
       );
 
-      bytes += generator.feed(2);
-      bytes += generator.cut();
+      // Mengurangi space kosong bagian bawah: generator.cut() otomatis menambahkan 5 empty lines.
+      // Cukup 1 feed agar pas di garis sobek (tear-bar) tanpa space kosong berlebih.
+      bytes += generator.feed(1);
+      if (is80mm) {
+        bytes += [29, 86, 66, 0];
+      }
 
       final printResult = await PrintBluetoothThermal.writeBytes(bytes);
       return (

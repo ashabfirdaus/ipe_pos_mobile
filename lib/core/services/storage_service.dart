@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../config/app_config.dart';
@@ -18,9 +17,7 @@ class StorageService {
   static Future<void> init() async {
     try {
       _prefs = await SharedPreferences.getInstance();
-    } catch (e) {
-      debugPrint('[StorageService] Peringatan: $e');
-    }
+    } catch (_) {}
   }
 
   // --- Base URL Config (Directly from ApiConfig) ---
@@ -94,6 +91,23 @@ class StorageService {
       } catch (_) {}
     }
     return null;
+  }
+
+  /// Cek apakah user yang login memiliki hak akses void POS
+  static Future<bool> canVoid() async {
+    final cached = await getUserData();
+    if (cached != null) {
+      try {
+        final json = jsonDecode(cached);
+        if (json is Map<String, dynamic>) {
+          return json['can_void'] == true ||
+              json['can_void'] == 1 ||
+              json['can_void']?.toString() == '1' ||
+              json['can_void']?.toString().toLowerCase() == 'true';
+        }
+      } catch (_) {}
+    }
+    return false;
   }
 
   // --- POS Branch & Warehouse Selection Cache ---

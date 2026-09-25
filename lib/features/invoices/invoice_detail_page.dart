@@ -7,6 +7,7 @@ import '../../core/models/pos_models.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/api_service.dart';
 import '../../core/services/printer_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/utils/currency_formatter.dart';
 
 class InvoiceDetailPage extends StatefulWidget {
@@ -21,6 +22,7 @@ class InvoiceDetailPage extends StatefulWidget {
 class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   bool _isLoading = true;
   bool _isPrinting = false;
+  bool _canVoid = false;
   InvoiceModel? _invoice;
   String? _errorMessage;
 
@@ -91,11 +93,13 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       _errorMessage = null;
     });
 
+    final canVoid = await StorageService.canVoid();
     final res = await ApiService.getInvoiceDetail(widget.invoiceId);
     if (!mounted) return;
 
     setState(() {
       _isLoading = false;
+      _canVoid = canVoid;
     });
 
     if (res.isSuccess && res.data != null) {
@@ -110,6 +114,16 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
   }
 
   void _showVoidDialog() {
+    if (!_canVoid) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Anda tidak memiliki izin untuk membatalkan (void) transaksi ini.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     final reasonController = TextEditingController();
     showDialog(
       context: context,
@@ -300,8 +314,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     ),
                     AppSizes.gapH12,
 
-                    // Void Button if Active
-                    if (_invoice!.status == 1)
+                    // Void Button if Active & Authorized
+                    if (_invoice!.status == 1 && _canVoid)
                       SizedBox(
                         width: double.infinity,
                         height: 48,
@@ -361,12 +375,44 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               ),
             ],
           ),
-          if (isVoid && _invoice!.voidDesc != null) ...[
-            AppSizes.gapH8,
-            Text(
-              'Alasan: ${_invoice!.voidDesc}',
-              style: const TextStyle(fontSize: 12, color: AppColors.error),
-            ),
+          if (isVoid) ...[
+            if (_invoice!.voidDesc != null && _invoice!.voidDesc!.trim().isNotEmpty) ...[
+              AppSizes.gapH8,
+              Text(
+                'Alasan: ${_invoice!.voidDesc}',
+                style: const TextStyle(fontSize: 12, color: AppColors.error),
+              ),
+            ],
+            if (_invoice!.voidByName != null && _invoice!.voidByName!.trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  const Icon(Icons.person_outline_rounded, size: 14, color: AppColors.error),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Dibatalkan oleh: ${_invoice!.voidByName}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (_invoice!.voidAt != null && _invoice!.voidAt!.trim().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Waktu batal: ${CurrencyFormatter.formatDate(_invoice!.voidAt!)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ],
           ],
         ],
       ),
@@ -448,25 +494,64 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                 fontSize: 13,
                               ),
                             ),
+                            // QR Satuan
                             if (item.qrcode != null &&
                                 item.qrcode!.isNotEmpty) ...[
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 3),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 1,
+                                  horizontal: 6,
+                                  vertical: 2,
                                 ),
                                 decoration: BoxDecoration(
                                   color: const Color(0xFFE8EAF6),
-                                  borderRadius: BorderRadius.circular(3),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFFC5CAE9)),
                                 ),
                                 child: Text(
-                                  'QR: ${item.qrcode}',
+                                  'Satuan: ${item.qrcode}',
                                   style: const TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 10.5,
                                     fontWeight: FontWeight.bold,
                                     color: Color(0xFF283593),
+                                    fontFamily: 'monospace',
                                   ),
+                                ),
+                              ),
+                            ],
+                            // QR Kemasan / Kardus
+                            if (item.wrapperQrcode != null &&
+                                item.wrapperQrcode!.isNotEmpty) ...[
+                              const SizedBox(height: 3),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFF3E0),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: const Color(0xFFFFCC80)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(
+                                      Icons.inventory_2_outlined,
+                                      size: 11,
+                                      color: Color(0xFFE65100),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'Kemasan: ${item.wrapperQrcode}',
+                                      style: const TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFFE65100),
+                                        fontFamily: 'monospace',
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

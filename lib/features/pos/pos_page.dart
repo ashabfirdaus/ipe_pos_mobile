@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_colors.dart';
@@ -10,6 +8,7 @@ import '../../core/routes/app_routes.dart';
 import '../../core/services/api_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/camera_scanner_page.dart';
+import 'widgets/kardus_conflict_dialog.dart';
 import 'widgets/receipt_dialog.dart';
 import 'widgets/scan_qr_dialog.dart';
 import 'widgets/stock_qty_confirm_dialog.dart';
@@ -128,6 +127,25 @@ class _PosPageState extends State<PosPage> {
     setState(() {});
   }
 
+  void _showNotification(
+    String message, {
+    Color? backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+    SnackBarBehavior behavior = SnackBarBehavior.floating,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: backgroundColor,
+          duration: duration,
+          behavior: behavior,
+        ),
+      );
+  }
+
   Future<void> _openProductCatalog() async {
     await Navigator.of(context).pushNamed(
       AppRoutes.posProducts,
@@ -161,22 +179,16 @@ class _PosPageState extends State<PosPage> {
     // Cek apakah QR stok ini sudah ada di dalam keranjang
     final isDuplicate = _cartItems.any((item) => item.qrcode == cleanCode);
     if (isDuplicate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
-          ),
-          backgroundColor: AppColors.warning,
-        ),
+      _showNotification(
+        'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Mencari data stok QR: $cleanCode...'),
-        duration: const Duration(seconds: 1),
-      ),
+    _showNotification(
+      'Mencari QR Kardus / Satuan: $cleanCode...',
+      duration: const Duration(seconds: 1),
     );
 
     final res = await ApiService.scanQr(
@@ -191,8 +203,21 @@ class _PosPageState extends State<PosPage> {
       final actualQrCode = product.qrcode?.isNotEmpty == true
           ? product.qrcode!
           : cleanCode;
+
+      // Cek konflik Kardus vs Satuan (Opsi 2)
+      final canProceed = await KardusConflictHelper.checkAndResolve(
+        context: context,
+        product: product,
+        cartItems: _cartItems,
+        onCartModified: () {
+          setState(() {});
+          _onCartChanged();
+        },
+      );
+      if (!canProceed || !mounted) return;
+
       int finalQty = 1;
-      if (product.stock > 1) {
+      if (product.isKardus && product.qrStock > 1) {
         final chosenQty = await StockQtyConfirmDialog.show(
           context,
           product: product,
@@ -200,18 +225,16 @@ class _PosPageState extends State<PosPage> {
         );
         if (chosenQty == null) return;
         finalQty = chosenQty;
+      } else if (product.isKardus) {
+        finalQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
       }
       _addToCart(product, qrcode: actualQrCode, qty: finalQty);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            res.message.isNotEmpty
-                ? res.message
-                : 'Stok barang dengan QR "$cleanCode" tidak ditemukan.',
-          ),
-          backgroundColor: AppColors.error,
-        ),
+      _showNotification(
+        res.message.isNotEmpty
+            ? res.message
+            : 'Stok barang dengan QR Kardus / Satuan "$cleanCode" tidak ditemukan.',
+        backgroundColor: AppColors.error,
       );
     }
   }
@@ -222,61 +245,149 @@ class _PosPageState extends State<PosPage> {
       builder: (ctx) => ScanQrDialog(
         warehouseId: _selectedWarehouseId,
         branchId: _selectedBranchId,
-        onProductFound: (product, qrcode, qty) {
-          _addToCart(product, qrcode: qrcode, qty: qty);
+        onProductFound: (product, qrcode, qty) async {
+          final canProceed = await KardusConflictHelper.checkAndResolve(
+            context: context,
+            product: product,
+            cartItems: _cartItems,
+            onCartModified: () {
+              setState(() {});
+              _onCartChanged();
+            },
+          );
+          if (canProceed && mounted) {
+            _addToCart(product, qrcode: qrcode, qty: qty);
+          }
         },
       ),
     );
   }
 
-  Future<void> _scanQrForItem(int index) async {
-    final scannedCode = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
-    );
+  Future<void> _incrementItem(int index) async {
+    final item = _cartItems[index];
 
-    if (scannedCode == null ||
-        scannedCode.trim().isEmpty ||
-        scannedCode.trim().toLowerCase() == 'null') {
-      return;
-    }
+    // Jika barang menggunakan QR fisik (Satuan ber-QR atau Kardus)
+    if (item.activeCodes.isNotEmpty || item.isKardus) {
+      if (item.qty >= item.product.stock) {
+        _showNotification(
+          'Batas stok tercapai: maks ${item.product.stock.toInt()} item',
+          duration: const Duration(milliseconds: 1200),
+        );
+        return;
+      }
 
-    final cleanCode = scannedCode.trim();
-    if (!mounted) return;
-
-    final isDuplicate = _cartItems.any((item) => item.qrcode == cleanCode);
-    if (isDuplicate) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'QR Code stok "$cleanCode" sudah digunakan di keranjang!',
-          ),
-          backgroundColor: AppColors.warning,
-        ),
+      final scannedCode = await Navigator.of(context).push<String>(
+        MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
       );
-      return;
+
+      // Jika kasir batal scan / menutup kamera, Qty TIDAK bertambah!
+      if (scannedCode == null ||
+          scannedCode.trim().isEmpty ||
+          scannedCode.trim().toLowerCase() == 'null') {
+        return;
+      }
+
+      final cleanCode = scannedCode.trim();
+      if (!mounted) return;
+
+      // Cek apakah QR sudah ada di dalam keranjang
+      final isDuplicate = _cartItems.any((it) => it.activeCodes.contains(cleanCode));
+      if (isDuplicate) {
+        _showNotification(
+          'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
+          backgroundColor: AppColors.warning,
+        );
+        return;
+      }
+
+      _showNotification(
+        'Mencari QR: $cleanCode...',
+        duration: const Duration(seconds: 1),
+      );
+
+      final res = await ApiService.scanQr(
+        qrcode: cleanCode,
+        warehouseId: _selectedWarehouseId,
+        branchId: _selectedBranchId,
+      );
+
+      if (!mounted) return;
+      if (res.isSuccess && res.data != null) {
+        final product = res.data!;
+        final actualQrCode = product.qrcode?.isNotEmpty == true
+            ? product.qrcode!
+            : cleanCode;
+
+        // Pastikan QR cocok dengan produk yang sama
+        if (product.itemId != item.product.itemId) {
+          _showNotification(
+            'QR "$actualQrCode" adalah produk "${product.name}", bukan "${item.product.name}"',
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        // Pastikan jenis kardus / satuan konsisten
+        if (product.isKardus != item.isKardus) {
+          _showNotification(
+            product.isKardus
+                ? 'QR ini adalah Kardus, tidak bisa digabung dengan item Satuan!'
+                : 'QR ini adalah Satuan, tidak bisa digabung dengan item Kardus!',
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        setState(() {
+          if (!item.activeCodes.contains(actualQrCode)) {
+            item.activeCodes.add(actualQrCode);
+            if (item.isKardus) {
+              item.wrapperQrcodes.add(actualQrCode);
+              final addQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
+              item.qty += addQty;
+            } else {
+              item.qrcodes.add(actualQrCode);
+              item.qty = item.activeCodes.length;
+            }
+          }
+          if (item.qty > item.product.stock) {
+            item.product.stock = item.qty.toDouble();
+          }
+        });
+        _onCartChanged();
+
+        _showNotification('${item.product.name} (QR: $actualQrCode) berhasil ditambahkan');
+      } else {
+        _showNotification(
+          res.message.isNotEmpty
+              ? res.message
+              : 'Stok barang dengan QR "$cleanCode" tidak ditemukan.',
+          backgroundColor: AppColors.error,
+        );
+      }
+    } else {
+      // Produk manual tanpa QR (ditambahkan dari katalog)
+      if (item.qty >= item.product.stock) {
+        _showNotification(
+          'Batas stok tercapai: maks ${item.product.stock.toInt()} item',
+          duration: const Duration(milliseconds: 1200),
+        );
+        return;
+      }
+      setState(() {
+        item.qty++;
+      });
+      _onCartChanged();
     }
-
-    setState(() {
-      _cartItems[index].qrcode = cleanCode;
-    });
-    _onCartChanged();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('QR Code stok "$cleanCode" berhasil dipasangkan'),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   void _addToCart(ProductModel product, {String qrcode = '', int qty = 1}) {
     if (product.stock <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stok produk sedang kosong!'),
-          backgroundColor: AppColors.warning,
-        ),
+      _showNotification(
+        'Stok produk sedang kosong!',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
@@ -288,44 +399,32 @@ class _PosPageState extends State<PosPage> {
     // 1. Jika ditambahkan dengan QR Code stok fisik
     if (effectiveQrcode.isNotEmpty) {
       final isQrDuplicate = _cartItems.any(
-        (item) => item.qrcode == effectiveQrcode,
+        (item) => item.activeCodes.contains(effectiveQrcode),
       );
       if (isQrDuplicate) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
-            ),
-            backgroundColor: AppColors.warning,
-          ),
+        _showNotification(
+          'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
+          backgroundColor: AppColors.warning,
         );
         return;
       }
 
-      // Cek apakah ada item produk sama yang belum punya QR stok
-      final unassignedIdx = _cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && item.qrcode.isEmpty,
+      // Cek apakah produk dengan tipe yang SAMA (Kardus dengan Kardus, Satuan dengan Satuan) sudah ada
+      final existingIndex = _cartItems.indexWhere(
+        (item) => item.product.itemId == product.itemId && item.isKardus == product.isKardus,
       );
 
-      if (unassignedIdx >= 0) {
-        if (_cartItems[unassignedIdx].qty > qty) {
-          setState(() {
-            _cartItems[unassignedIdx].qty -= qty;
-            _cartItems.add(
-              CartItemModel(
-                product: product,
-                qty: qty,
-                price: product.price,
-                qrcode: effectiveQrcode,
-              ),
-            );
-          });
-        } else {
-          setState(() {
-            _cartItems[unassignedIdx].qrcode = effectiveQrcode;
-            _cartItems[unassignedIdx].qty = qty;
-          });
-        }
+      if (existingIndex >= 0) {
+        final existingItem = _cartItems[existingIndex];
+        setState(() {
+          if (!existingItem.activeCodes.contains(effectiveQrcode)) {
+            existingItem.activeCodes.add(effectiveQrcode);
+          }
+          existingItem.qty += qty;
+          if (existingItem.qty > existingItem.product.stock) {
+            existingItem.product.stock = existingItem.qty.toDouble();
+          }
+        });
       } else {
         setState(() {
           _cartItems.add(
@@ -333,7 +432,8 @@ class _PosPageState extends State<PosPage> {
               product: product,
               qty: qty,
               price: product.price,
-              qrcode: effectiveQrcode,
+              qrcodes: product.isKardus ? [] : [effectiveQrcode],
+              wrapperQrcodes: product.isKardus ? [effectiveQrcode] : [],
             ),
           );
         });
@@ -341,22 +441,19 @@ class _PosPageState extends State<PosPage> {
     } else {
       // 2. Jika ditambahkan manual dari katalog
       final existingIndex = _cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && item.qrcode.isEmpty,
+        (item) => item.product.itemId == product.itemId && !item.isKardus,
       );
 
       if (existingIndex >= 0) {
-        if (_cartItems[existingIndex].qty + qty <= product.stock) {
+        final existingItem = _cartItems[existingIndex];
+        if (existingItem.qty + qty <= product.stock) {
           setState(() {
-            _cartItems[existingIndex].qty += qty;
+            existingItem.qty += qty;
           });
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Jumlah pesanan sudah mencapai batas stok tersedia!',
-              ),
-              backgroundColor: AppColors.warning,
-            ),
+          _showNotification(
+            'Jumlah pesanan sudah mencapai batas stok tersedia!',
+            backgroundColor: AppColors.warning,
           );
           return;
         }
@@ -367,7 +464,8 @@ class _PosPageState extends State<PosPage> {
               product: product,
               qty: qty,
               price: product.price,
-              qrcode: '',
+              qrcodes: [],
+              wrapperQrcodes: [],
             ),
           );
         });
@@ -376,25 +474,7 @@ class _PosPageState extends State<PosPage> {
 
     _onCartChanged();
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          qrcode.isNotEmpty
-              ? '${product.name} (Qty: $qty, QR: $qrcode) ditambahkan'
-              : '${product.name} dimasukkan ke keranjang',
-        ),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        action: qrcode.isNotEmpty
-            ? SnackBarAction(
-                label: 'Scan Lagi',
-                textColor: Colors.white,
-                onPressed: _openDirectCameraScanner,
-              )
-            : null,
-      ),
-    );
+    _showNotification('${product.name} berhasil ditambahkan');
   }
 
   void _clearCart() async {
@@ -428,36 +508,36 @@ class _PosPageState extends State<PosPage> {
   }
 
   Future<void> _handleCheckout() async {
+    // Jaminan ketat: item Satuan ber-QR hanya boleh dijual sebanyak QR yang berhasil di-scan
+    // Item Kardus tidak dipotong menjadi activeCodes.length karena 1 wrapper QR mewakili seluruh isi kemasan/kardus
+    for (final item in _cartItems) {
+      if (!item.isKardus && item.activeCodes.isNotEmpty && item.qty > item.activeCodes.length) {
+        item.qty = item.activeCodes.length;
+      }
+    }
+
     final grandTotal = _calculateGrandTotal();
 
     if (_cartItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Keranjang belanja masih kosong! Silakan pilih produk atau scan QR stok.',
-          ),
-          backgroundColor: AppColors.warning,
-        ),
+      _showNotification(
+        'Keranjang belanja masih kosong! Silakan pilih produk atau scan QR stok.',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
 
     if (_selectedBranchId == null || _selectedWarehouseId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Silakan pilih Cabang dan Gudang terlebih dahulu!'),
-          backgroundColor: AppColors.warning,
-        ),
+      _showNotification(
+        'Silakan pilih Cabang dan Gudang terlebih dahulu!',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
 
     if (_selectedPaymentMethodId <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Silakan pilih metode pembayaran terlebih dahulu!'),
-          backgroundColor: AppColors.warning,
-        ),
+      _showNotification(
+        'Silakan pilih metode pembayaran terlebih dahulu!',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
@@ -483,9 +563,6 @@ class _PosPageState extends State<PosPage> {
       'details': itemsPayload,
     };
 
-    debugPrint(
-      '[POS Checkout] Mengirim detail transaksi POS ke server: ${jsonEncode(payload)}',
-    );
     final res = await ApiService.saveInvoice(payload);
 
     if (!mounted) return;
@@ -508,7 +585,12 @@ class _PosPageState extends State<PosPage> {
                   price: item.price,
                   discount: item.discount,
                   subTotal: item.subTotal,
-                  qrcode: item.qrcode.isNotEmpty ? item.qrcode : null,
+                  qrcode: item.isKardus ? null : (item.qrcode.isNotEmpty ? item.qrcode : null),
+                  wrapperQrcode: item.isKardus
+                      ? (item.wrapperQrcodes.isNotEmpty
+                          ? item.wrapperQrcodes.join(', ')
+                          : item.product.wrapperQrcode)
+                      : null,
                   unit: item.product.unit,
                   itemCode: item.product.code,
                 ),
@@ -532,6 +614,9 @@ class _PosPageState extends State<PosPage> {
       }
       if (invoice.promoName == null && promoUsed != null) {
         invoice = invoice.copyWith(promoName: promoUsed.name);
+      }
+      if (invoice.discount == 0 && promoUsed != null) {
+        invoice = invoice.copyWith(discount: _calculateDiscount());
       }
       if (invoice.subTotal == 0) {
         invoice = invoice.copyWith(subTotal: _calculateSubTotal());
@@ -558,15 +643,11 @@ class _PosPageState extends State<PosPage> {
         builder: (ctx) => ReceiptDialog(invoice: invoice),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            res.message.isNotEmpty
-                ? res.message
-                : 'Gagal memproses transaksi kasir.',
-          ),
-          backgroundColor: AppColors.error,
-        ),
+      _showNotification(
+        res.message.isNotEmpty
+            ? res.message
+            : 'Gagal memproses transaksi kasir.',
+        backgroundColor: AppColors.error,
       );
     }
   }
@@ -852,78 +933,145 @@ class _PosPageState extends State<PosPage> {
   }
 
   Widget _buildCartItemTile(CartItemModel item, int index) {
-    final hasQr = item.qrcode.isNotEmpty;
-
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          // 1. Top Row: Product Name (Full Width) + Delete Button
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
                   item.product.name,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 14,
+                    color: AppColors.textPrimary,
+                    height: 1.3,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                AppSizes.gapH4,
-                Text(
-                  '${CurrencyFormatter.format(item.price)} / ${item.product.unit ?? "pcs"}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _cartItems.removeAt(index);
+                  });
+                  _onCartChanged();
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 19,
+                    color: Colors.grey.shade500,
                   ),
                 ),
-                if (hasQr) ...[
-                  const SizedBox(height: 4),
-                  Container(
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+
+          // 2. Badge Row: QR Kardus / Satuan / Pasangkan QR
+          if (item.activeCodes.isNotEmpty) ...[
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                ...item.activeCodes.map((qr) {
+                  return Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
+                      horizontal: 7,
+                      vertical: 2.5,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE8EAF6),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: const Color(0xFFC5CAE9)),
+                      color: item.isKardus
+                          ? const Color(0xFFFFF3E0)
+                          : const Color(0xFFE8EAF6),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: item.isKardus
+                            ? const Color(0xFFFFB74D)
+                            : const Color(0xFFC5CAE9),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.qr_code_2_rounded,
+                        Icon(
+                          item.isKardus
+                              ? Icons.inventory_2_outlined
+                              : Icons.qr_code_2_rounded,
                           size: 13,
-                          color: Color(0xFF283593),
+                          color: item.isKardus
+                              ? const Color(0xFFE65100)
+                              : const Color(0xFF283593),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'QR: ${item.qrcode}',
-                          style: const TextStyle(
-                            fontSize: 10,
+                          item.isKardus ? 'Kardus: $qr' : 'Satuan: $qr',
+                          style: TextStyle(
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF283593),
+                            color: item.isKardus
+                                ? const Color(0xFFE65100)
+                                : const Color(0xFF283593),
                             fontFamily: 'monospace',
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              item.activeCodes.remove(qr);
+                              if (item.isKardus) {
+                                item.wrapperQrcodes.remove(qr);
+                              } else {
+                                item.qrcodes.remove(qr);
+                              }
+                              if (item.activeCodes.isEmpty) {
+                                _cartItems.removeAt(index);
+                              } else {
+                                if (!item.isKardus) {
+                                  item.qty = item.activeCodes.length;
+                                } else {
+                                  final capacityPerKardus = item.product.qrStock.toInt() > 0 ? item.product.qrStock.toInt() : 1;
+                                  item.qty = item.wrapperQrcodes.length * capacityPerKardus;
+                                }
+                              }
+                            });
+                            _onCartChanged();
+                          },
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 13,
+                            color: item.isKardus
+                                ? const Color(0xFFE65100)
+                                : const Color(0xFF283593),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ] else ...[
-                  const SizedBox(height: 4),
+                  );
+                }),
+                if (!item.isKardus && item.qty > item.qrcodes.length)
                   InkWell(
-                    onTap: () => _scanQrForItem(index),
+                    onTap: () => _incrementItem(index),
+                    borderRadius: BorderRadius.circular(5),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 2,
+                        horizontal: 7,
+                        vertical: 2.5,
                       ),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(5),
                         border: Border.all(color: Colors.amber.shade300),
                       ),
                       child: Row(
@@ -931,14 +1079,14 @@ class _PosPageState extends State<PosPage> {
                         children: [
                           Icon(
                             Icons.add_a_photo_outlined,
-                            size: 12,
+                            size: 13,
                             color: Colors.amber.shade900,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            '+ Scan QR Stok',
+                            '+ Scan QR (${item.qrcodes.length}/${item.qty})',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.bold,
                               color: Colors.amber.shade900,
                             ),
@@ -947,100 +1095,167 @@ class _PosPageState extends State<PosPage> {
                       ),
                     ),
                   ),
-                ],
               ],
             ),
-          ),
-          AppSizes.gapW8,
-
-          // Qty Controls (Bisa dikurangi, tidak bisa ditambah melebihi stok QR/produk)
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.remove, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      if (item.qty > 1) {
-                        item.qty--;
-                      } else {
-                        _cartItems.removeAt(index);
-                      }
-                    });
-                    _onCartChanged();
-                  },
+          ] else ...[
+            InkWell(
+              onTap: () => _incrementItem(index),
+              borderRadius: BorderRadius.circular(5),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2.5,
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Text(
-                    '${item.qty}',
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(5),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.add_a_photo_outlined,
+                      size: 13,
+                      color: Colors.amber.shade900,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '+ Pasangkan QR Stok',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.amber.shade900,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+
+          // 3. Bottom Row: Subtotal & Harga Satuan (Kiri) + Stepper Qty (Kanan)
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Kolom Harga
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    CurrencyFormatter.format(item.subTotal),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                      fontSize: 15,
+                      color: AppColors.primary,
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.add, size: 16),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 28,
-                    minHeight: 28,
+                  const SizedBox(height: 2),
+                  Text(
+                    '@ ${CurrencyFormatter.format(item.price)} / ${item.product.unit ?? "pcs"}',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Colors.grey.shade600,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  // Tidak bisa ditambah melebihi remaining_qty stok yang ada
-                  onPressed: item.qty >= item.product.stock
-                      ? null
-                      : () {
+                ],
+              ),
+
+              // Qty Stepper Controls
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Tombol Minus
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(7)),
+                        onTap: () {
                           setState(() {
-                            item.qty++;
+                            if (item.qty > 1) {
+                              item.qty--;
+                              if (item.activeCodes.length > item.qty) {
+                                final removed = item.activeCodes.removeLast();
+                                if (item.isKardus) {
+                                  item.wrapperQrcodes.remove(removed);
+                                } else {
+                                  item.qrcodes.remove(removed);
+                                }
+                              }
+                            } else {
+                              _cartItems.removeAt(index);
+                            }
                           });
                           _onCartChanged();
                         },
+                        child: Container(
+                          width: 32,
+                          height: 30,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            item.qty == 1 ? Icons.delete_outline_rounded : Icons.remove,
+                            size: item.qty == 1 ? 16 : 17,
+                            color: item.qty == 1 ? Colors.red.shade400 : Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    // Teks Qty
+                    Container(
+                      constraints: const BoxConstraints(minWidth: 36),
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.symmetric(
+                          vertical: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '${item.qty}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+
+                    // Tombol Plus
+                    Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                        onTap: () => _incrementItem(index),
+                        child: Container(
+                          width: 32,
+                          height: 30,
+                          alignment: Alignment.center,
+                          child: Icon(
+                            Icons.add,
+                            size: 17,
+                            color: item.qty >= item.product.stock
+                                ? Colors.grey.shade300
+                                : AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          AppSizes.gapW12,
-
-          // Subtotal
-          SizedBox(
-            width: 80,
-            child: Text(
-              CurrencyFormatter.format(item.subTotal),
-              textAlign: TextAlign.right,
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: AppColors.textPrimary,
               ),
-            ),
-          ),
-
-          // Delete Button
-          IconButton(
-            icon: const Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: AppColors.error,
-            ),
-            tooltip: 'Hapus',
-            onPressed: () {
-              setState(() {
-                _cartItems.removeAt(index);
-              });
-              _onCartChanged();
-            },
+            ],
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import '../../core/models/pos_models.dart';
 import '../../core/services/api_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/camera_scanner_page.dart';
+import 'widgets/kardus_conflict_dialog.dart';
 import 'widgets/stock_qty_confirm_dialog.dart';
 
 class PosProductCatalogPage extends StatefulWidget {
@@ -44,15 +45,31 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     super.dispose();
   }
 
+  void _showNotification(
+    String message, {
+    Color? backgroundColor,
+    Duration duration = const Duration(seconds: 2),
+    SnackBarBehavior behavior = SnackBarBehavior.floating,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: backgroundColor,
+          duration: duration,
+          behavior: behavior,
+        ),
+      );
+  }
+
   Future<void> _loadProducts({String? search}) async {
     final query = search?.trim();
     if (query != null && query.isNotEmpty && query.length < 3) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Minimal input pencarian adalah 3 karakter.'),
-          backgroundColor: AppColors.warning,
-          duration: Duration(seconds: 2),
-        ),
+      _showNotification(
+        'Minimal input pencarian adalah 3 karakter.',
+        backgroundColor: AppColors.warning,
       );
       return;
     }
@@ -73,13 +90,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         _products = res.data!;
       });
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            res.message.isNotEmpty ? res.message : 'Gagal memuat produk',
-          ),
-          backgroundColor: AppColors.error,
-        ),
+      _showNotification(
+        res.message.isNotEmpty ? res.message : 'Gagal memuat produk',
+        backgroundColor: AppColors.error,
       );
     }
   }
@@ -91,12 +104,10 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
 
   void _addToCart(ProductModel product, {String qrcode = '', int qty = 1}) {
     if (product.stock <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stok produk sedang kosong!'),
-          backgroundColor: AppColors.warning,
-          duration: Duration(milliseconds: 1200),
-        ),
+      _showNotification(
+        'Stok produk sedang kosong!',
+        backgroundColor: AppColors.warning,
+        duration: const Duration(milliseconds: 1200),
       );
       return;
     }
@@ -106,48 +117,62 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         : (product.qrcode?.isNotEmpty == true ? product.qrcode! : '');
 
     if (effectiveQrcode.isNotEmpty) {
-      final isDuplicate = widget.cartItems.any((item) => item.qrcode == effectiveQrcode);
+      final isDuplicate = widget.cartItems.any((item) => item.activeCodes.contains(effectiveQrcode));
       if (isDuplicate) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
-            ),
-            backgroundColor: AppColors.warning,
-          ),
+        _showNotification(
+          'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
+          backgroundColor: AppColors.warning,
         );
         return;
       }
 
-      setState(() {
-        widget.cartItems.add(
-          CartItemModel(
-            product: product,
-            qty: qty,
-            price: product.price,
-            qrcode: effectiveQrcode,
-          ),
-        );
-      });
-      widget.onCartUpdated();
-    } else {
+      // Cek apakah produk dengan tipe yang SAMA (Kardus dengan Kardus, Satuan dengan Satuan) sudah ada
       final existingIndex = widget.cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && item.qrcode.isEmpty,
+        (item) => item.product.itemId == product.itemId && item.isKardus == product.isKardus,
       );
 
       if (existingIndex >= 0) {
-        if (widget.cartItems[existingIndex].qty + qty <= product.stock) {
+        final existingItem = widget.cartItems[existingIndex];
+        setState(() {
+          if (!existingItem.activeCodes.contains(effectiveQrcode)) {
+            existingItem.activeCodes.add(effectiveQrcode);
+          }
+          existingItem.qty += qty;
+          if (existingItem.qty > existingItem.product.stock) {
+            existingItem.product.stock = existingItem.qty.toDouble();
+          }
+        });
+      } else {
+        setState(() {
+          widget.cartItems.add(
+            CartItemModel(
+              product: product,
+              qty: qty,
+              price: product.price,
+              qrcodes: product.isKardus ? [] : [effectiveQrcode],
+              wrapperQrcodes: product.isKardus ? [effectiveQrcode] : [],
+            ),
+          );
+        });
+      }
+      widget.onCartUpdated();
+    } else {
+      final existingIndex = widget.cartItems.indexWhere(
+        (item) => item.product.itemId == product.itemId && !item.isKardus,
+      );
+
+      if (existingIndex >= 0) {
+        final existingItem = widget.cartItems[existingIndex];
+        if (existingItem.qty + qty <= product.stock) {
           setState(() {
-            widget.cartItems[existingIndex].qty += qty;
+            existingItem.qty += qty;
           });
           widget.onCartUpdated();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Jumlah pesanan mencapai batas stok tersedia!'),
-              backgroundColor: AppColors.warning,
-              duration: Duration(milliseconds: 1200),
-            ),
+          _showNotification(
+            'Jumlah pesanan mencapai batas stok tersedia!',
+            backgroundColor: AppColors.warning,
+            duration: const Duration(milliseconds: 1200),
           );
           return;
         }
@@ -158,7 +183,8 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
               product: product,
               qty: qty,
               price: product.price,
-              qrcode: '',
+              qrcodes: [],
+              wrapperQrcodes: [],
             ),
           );
         });
@@ -166,25 +192,7 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       }
     }
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          qrcode.isNotEmpty
-              ? '${product.name} (Qty: $qty, QR: $qrcode) ditambahkan'
-              : '${product.name} dimasukkan ke keranjang',
-        ),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        action: qrcode.isNotEmpty
-            ? SnackBarAction(
-                label: 'Scan Lagi',
-                textColor: Colors.white,
-                onPressed: _openDirectCameraScanner,
-              )
-            : null,
-      ),
-    );
+    _showNotification('${product.name} berhasil ditambahkan');
   }
 
   void _removeFromCart(ProductModel product) {
@@ -217,11 +225,9 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
 
     final cleanCode = scannedCode.trim();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Mencari kode: $cleanCode...'),
-        duration: const Duration(seconds: 1),
-      ),
+    _showNotification(
+      'Mencari QR Kardus / Satuan: $cleanCode...',
+      duration: const Duration(seconds: 1),
     );
 
     final res = await ApiService.scanQr(
@@ -234,8 +240,21 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     if (res.isSuccess && res.data != null) {
       final product = res.data!;
       final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : cleanCode;
+
+      // Cek konflik Kardus vs Satuan (Opsi 2)
+      final canProceed = await KardusConflictHelper.checkAndResolve(
+        context: context,
+        product: product,
+        cartItems: widget.cartItems,
+        onCartModified: () {
+          setState(() {});
+          widget.onCartUpdated();
+        },
+      );
+      if (!canProceed || !mounted) return;
+
       int finalQty = 1;
-      if (product.stock > 1) {
+      if (product.isKardus && product.qrStock > 1) {
         final chosenQty = await StockQtyConfirmDialog.show(
           context,
           product: product,
@@ -243,18 +262,16 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
         );
         if (chosenQty == null) return;
         finalQty = chosenQty;
+      } else if (product.isKardus) {
+        finalQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
       }
       _addToCart(product, qrcode: actualQrCode, qty: finalQty);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            res.message.isNotEmpty
-                ? res.message
-                : 'Produk "$cleanCode" tidak ditemukan.',
-          ),
-          backgroundColor: AppColors.error,
-        ),
+      _showNotification(
+        res.message.isNotEmpty
+            ? res.message
+            : 'QR Code Kardus / Satuan "$cleanCode" tidak ditemukan.',
+        backgroundColor: AppColors.error,
       );
     }
   }
@@ -271,6 +288,11 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
       appBar: AppBar(
         title: const Text('Katalog Produk POS'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner_rounded),
+            tooltip: 'Scan QR / Barcode',
+            onPressed: _openDirectCameraScanner,
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Muat Ulang',
@@ -326,7 +348,7 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                           AppSizes.md,
                         ),
                         itemCount: _products.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final product = _products[index];
                           final qtyInCart = _getQtyInCart(product.id);

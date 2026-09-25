@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_sizes.dart';
 import '../../../core/constants/app_text_styles.dart';
@@ -107,20 +106,22 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
       setState(() {
         _errorMessage = res.message.isNotEmpty
             ? res.message
-            : 'Produk dengan QR Code berakhiran "$cleanCode" tidak ditemukan.';
+            : 'Produk dengan QR Code Kardus / Satuan "$cleanCode" tidak ditemukan.';
       });
     }
   }
 
   Future<void> _confirmAdd(ProductModel product) async {
     if (product.stock <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Stok produk sedang kosong!'),
-          backgroundColor: AppColors.warning,
-          duration: Duration(milliseconds: 1200),
-        ),
-      );
+      ScaffoldMessenger.of(context)
+        ..clearSnackBars()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('Stok produk sedang kosong!'),
+            backgroundColor: AppColors.warning,
+            duration: Duration(milliseconds: 1200),
+          ),
+        );
       return;
     }
 
@@ -129,7 +130,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
         : _codeController.text.trim();
     int finalQty = 1;
 
-    if (product.stock > 1) {
+    if (product.isKardus && product.qrStock > 1) {
       final chosenQty = await StockQtyConfirmDialog.show(
         context,
         product: product,
@@ -137,6 +138,8 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
       );
       if (chosenQty == null) return;
       finalQty = chosenQty;
+    } else if (product.isKardus) {
+      finalQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
     }
 
     widget.onProductFound(product, code, finalQty);
@@ -169,7 +172,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                   children: [
                     Icon(Icons.qr_code_scanner_rounded, color: AppColors.primary),
                     AppSizes.gapW8,
-                    Text('Scan / Cari QR Code', style: AppTextStyles.h3),
+                    Text('Scan QR Kardus / Satuan', style: AppTextStyles.h3),
                   ],
                 ),
                 IconButton(
@@ -188,12 +191,11 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                     controller: _codeController,
                     focusNode: _focusNode,
                     autofocus: true,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    textCapitalization: TextCapitalization.characters,
                     decoration: const InputDecoration(
-                      labelText: 'Kode QR Produk (Angka)',
-                      hintText: 'Misal: 003 / Scan Barcode',
-                      prefixIcon: Icon(Icons.barcode_reader),
+                      labelText: 'Kode QR Kardus / Satuan',
+                      hintText: 'Misal: 101AF00008, 03AF000001, atau 008',
+                      prefixIcon: Icon(Icons.qr_code_2_rounded),
                       isDense: true,
                     ),
                     onSubmitted: _handleScan,
@@ -206,7 +208,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
                   ),
                   icon: const Icon(Icons.camera_alt_rounded, color: Colors.white),
-                  tooltip: 'Buka Kamera Barcode',
+                  tooltip: 'Buka Kamera Barcode / QR',
                   onPressed: _openCameraScanner,
                 ),
               ],
@@ -215,7 +217,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
 
             // Helper Info Text
             Text(
-              'Pencarian mencocokkan digit kode QR dari belakang (suffix match).',
+              'Bisa scan / cari QR Code Kardus maupun Satuan (cocok penuh atau suffix akhir digit).',
               style: TextStyle(
                 fontSize: 11,
                 color: Colors.grey.shade600,
@@ -374,20 +376,39 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                                             Container(
                                               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                               decoration: BoxDecoration(
-                                                color: const Color(0xFFE8EAF6),
+                                                color: product.isKardus
+                                                    ? const Color(0xFFFFF3E0)
+                                                    : const Color(0xFFE8EAF6),
                                                 borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(
+                                                  color: product.isKardus
+                                                      ? const Color(0xFFFFB74D)
+                                                      : const Color(0xFF9FA8DA),
+                                                ),
                                               ),
                                               child: Row(
                                                 mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const Icon(Icons.qr_code_2_rounded, size: 11, color: Color(0xFF1A237E)),
-                                                  const SizedBox(width: 2),
+                                                  Icon(
+                                                    product.isKardus
+                                                        ? Icons.inventory_2_outlined
+                                                        : Icons.qr_code_2_rounded,
+                                                    size: 11,
+                                                    color: product.isKardus
+                                                        ? const Color(0xFFE65100)
+                                                        : const Color(0xFF1A237E),
+                                                  ),
+                                                  const SizedBox(width: 3),
                                                   Text(
-                                                    'QR: ${product.qrcode}',
-                                                    style: const TextStyle(
+                                                    product.isKardus
+                                                        ? 'Kardus: ${product.qrcode}'
+                                                        : 'Satuan: ${product.qrcode}',
+                                                    style: TextStyle(
                                                       fontSize: 10.5,
                                                       fontWeight: FontWeight.bold,
-                                                      color: Color(0xFF1A237E),
+                                                      color: product.isKardus
+                                                          ? const Color(0xFFE65100)
+                                                          : const Color(0xFF1A237E),
                                                     ),
                                                   ),
                                                 ],

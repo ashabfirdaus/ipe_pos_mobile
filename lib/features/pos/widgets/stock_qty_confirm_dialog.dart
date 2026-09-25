@@ -25,7 +25,9 @@ class StockQtyConfirmDialog extends StatefulWidget {
     required ProductModel product,
     required String qrcode,
   }) {
-    final maxQty = product.stock > 0 ? product.stock.toInt() : 1;
+    final maxQty = product.qrStock > 0
+        ? product.qrStock.toInt()
+        : (product.stock > 0 ? product.stock.toInt() : 1);
     return showDialog<int>(
       context: context,
       barrierDismissible: false,
@@ -141,20 +143,24 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                   ),
                 ),
                 AppSizes.gapW12,
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Konfirmasi Jumlah Qty',
-                        style: TextStyle(
+                        widget.product.isKardus
+                            ? 'Konfirmasi Qty Kardus'
+                            : 'Konfirmasi Jumlah Qty',
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
                       ),
                       Text(
-                        'Stok fisik QR memiliki > 1 barang',
-                        style: TextStyle(
+                        widget.product.isKardus
+                            ? 'Stok dalam Kardus ini: ${widget.maxQty} item'
+                            : 'Stok fisik QR memiliki > 1 barang',
+                        style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
                         ),
@@ -173,9 +179,15 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade50,
+                color: widget.product.isKardus
+                    ? const Color(0xFFFFF8E1)
+                    : Colors.grey.shade50,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade200),
+                border: Border.all(
+                  color: widget.product.isKardus
+                      ? const Color(0xFFFFE082)
+                      : Colors.grey.shade200,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -195,20 +207,39 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE8EAF6),
+                          color: widget.product.isKardus
+                              ? const Color(0xFFFFF3E0)
+                              : const Color(0xFFE8EAF6),
                           borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: widget.product.isKardus
+                                ? const Color(0xFFFFB74D)
+                                : const Color(0xFF9FA8DA),
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.qr_code_2_rounded, size: 12, color: Color(0xFF283593)),
+                            Icon(
+                              widget.product.isKardus
+                                  ? Icons.inventory_2_outlined
+                                  : Icons.qr_code_2_rounded,
+                              size: 12,
+                              color: widget.product.isKardus
+                                  ? const Color(0xFFE65100)
+                                  : const Color(0xFF283593),
+                            ),
                             const SizedBox(width: 4),
                             Text(
-                              'QR: ${widget.qrcode}',
-                              style: const TextStyle(
+                              widget.product.isKardus
+                                  ? 'Kardus: ${widget.qrcode}'
+                                  : 'Satuan: ${widget.qrcode}',
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
-                                color: Color(0xFF283593),
+                                color: widget.product.isKardus
+                                    ? const Color(0xFFE65100)
+                                    : const Color(0xFF283593),
                               ),
                             ),
                           ],
@@ -227,11 +258,15 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Sisa Stok QR: ${widget.maxQty} $unit',
-                    style: const TextStyle(
+                    widget.product.isKardus
+                        ? 'Sisa Stok Kardus: ${widget.maxQty} $unit'
+                        : 'Sisa Stok QR: ${widget.maxQty} $unit',
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: widget.product.isKardus
+                          ? const Color(0xFFE65100)
+                          : AppColors.primary,
                     ),
                   ),
                 ],

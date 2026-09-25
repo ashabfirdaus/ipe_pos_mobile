@@ -205,13 +205,13 @@ class _CameraScannerPageState extends State<CameraScannerPage> with SingleTicker
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Arahkan kamera ke QR Code atau Barcode Produk',
+                                'Arahkan kamera ke QR Code Kardus, Satuan, atau Barcode',
                                 style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
                                 textAlign: TextAlign.center,
                               ),
                               SizedBox(height: 4),
                               Text(
-                                'Pemindaian akan diproses secara otomatis',
+                                'Mendukung QR Kardus & Satuan Produk secara otomatis',
                                 style: TextStyle(color: Colors.white70, fontSize: 11),
                                 textAlign: TextAlign.center,
                               ),

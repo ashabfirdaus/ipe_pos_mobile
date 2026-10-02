@@ -395,7 +395,7 @@ class _CartSheetState extends State<CartSheet> {
                 : ListView.separated(
                     padding: const EdgeInsets.all(AppSizes.md),
                     itemCount: widget.cartItems.length,
-                    separatorBuilder: (_, __) => const Divider(height: 20),
+                    separatorBuilder: (_, _) => const Divider(height: 20),
                     itemBuilder: (context, index) {
                       final item = widget.cartItems[index];
 

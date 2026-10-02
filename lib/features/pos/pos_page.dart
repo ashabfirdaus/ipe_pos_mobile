@@ -291,7 +291,9 @@ class _PosPageState extends State<PosPage> {
       if (!mounted) return;
 
       // Cek apakah QR sudah ada di dalam keranjang
-      final isDuplicate = _cartItems.any((it) => it.activeCodes.contains(cleanCode));
+      final isDuplicate = _cartItems.any(
+        (it) => it.activeCodes.contains(cleanCode),
+      );
       if (isDuplicate) {
         _showNotification(
           'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
@@ -345,7 +347,9 @@ class _PosPageState extends State<PosPage> {
             item.activeCodes.add(actualQrCode);
             if (item.isKardus) {
               item.wrapperQrcodes.add(actualQrCode);
-              final addQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
+              final addQty = product.qrStock.toInt() > 0
+                  ? product.qrStock.toInt()
+                  : 1;
               item.qty += addQty;
             } else {
               item.qrcodes.add(actualQrCode);
@@ -358,7 +362,9 @@ class _PosPageState extends State<PosPage> {
         });
         _onCartChanged();
 
-        _showNotification('${item.product.name} (QR: $actualQrCode) berhasil ditambahkan');
+        _showNotification(
+          '${item.product.name} (QR: $actualQrCode) berhasil ditambahkan',
+        );
       } else {
         _showNotification(
           res.message.isNotEmpty
@@ -411,7 +417,9 @@ class _PosPageState extends State<PosPage> {
 
       // Cek apakah produk dengan tipe yang SAMA (Kardus dengan Kardus, Satuan dengan Satuan) sudah ada
       final existingIndex = _cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && item.isKardus == product.isKardus,
+        (item) =>
+            item.product.itemId == product.itemId &&
+            item.isKardus == product.isKardus,
       );
 
       if (existingIndex >= 0) {
@@ -511,7 +519,9 @@ class _PosPageState extends State<PosPage> {
     // Jaminan ketat: item Satuan ber-QR hanya boleh dijual sebanyak QR yang berhasil di-scan
     // Item Kardus tidak dipotong menjadi activeCodes.length karena 1 wrapper QR mewakili seluruh isi kemasan/kardus
     for (final item in _cartItems) {
-      if (!item.isKardus && item.activeCodes.isNotEmpty && item.qty > item.activeCodes.length) {
+      if (!item.isKardus &&
+          item.activeCodes.isNotEmpty &&
+          item.qty > item.activeCodes.length) {
         item.qty = item.activeCodes.length;
       }
     }
@@ -585,11 +595,13 @@ class _PosPageState extends State<PosPage> {
                   price: item.price,
                   discount: item.discount,
                   subTotal: item.subTotal,
-                  qrcode: item.isKardus ? null : (item.qrcode.isNotEmpty ? item.qrcode : null),
+                  qrcode: item.isKardus
+                      ? null
+                      : (item.qrcode.isNotEmpty ? item.qrcode : null),
                   wrapperQrcode: item.isKardus
                       ? (item.wrapperQrcodes.isNotEmpty
-                          ? item.wrapperQrcodes.join(', ')
-                          : item.product.wrapperQrcode)
+                            ? item.wrapperQrcodes.join(', ')
+                            : item.product.wrapperQrcode)
                       : null,
                   unit: item.product.unit,
                   itemCode: item.product.code,
@@ -680,34 +692,37 @@ class _PosPageState extends State<PosPage> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
+                  // Pinned Top Action Bar: Scan QR Barang & Input Kode Manual
+                  _buildPinnedScanSection(),
+
                   // Scrollable POS Content
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(
                         AppSizes.md,
-                        AppSizes.md,
+                        2,
                         AppSizes.md,
                         8,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. Tombol Aksi Kasir: Scan QR Barang & Input Manual Kode & Katalog
-                          _buildActionButtons(totalItemsCount),
+                          // 1. Tombol Katalog Produk
+                          _buildCatalogButton(totalItemsCount),
                           const SizedBox(height: 10),
 
                           // 2. Section Daftar Barang Keranjang
                           _buildCartSection(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
 
                           // 3. Section Pilihan Metode Pembayaran
                           _buildPaymentMethodSection(),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 10),
 
                           // 4. Section Promo Diskon
                           if (_promos.isNotEmpty) ...[
                             _buildPromoSection(),
-                            const SizedBox(height: 12),
+                            const SizedBox(height: 10),
                           ],
 
                           // 5. Section Ringkasan Perhitungan & Pembayaran
@@ -726,121 +741,129 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  Widget _buildActionButtons(int totalItemsCount) {
-    return Column(
-      children: [
-        // 1 & 2: Tombol Terpisah: Scan QR Barang & Input Manual Kode (Ukuran Ringkas/Disesuaikan)
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 11,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                  ),
-                  elevation: 1,
+  Widget _buildPinnedScanSection() {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSizes.md,
+        vertical: 10,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            offset: const Offset(0, 2),
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 11,
                 ),
-                onPressed: _openDirectCameraScanner,
-                icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-                label: const Text(
-                  'Scan QR Barang',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  overflow: TextOverflow.ellipsis,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
                 ),
+                elevation: 1,
               ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFE8EAF6),
-                  foregroundColor: const Color(0xFF1A237E),
-                  elevation: 0,
-                  side: const BorderSide(color: Color(0xFFC5CAE9)),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 11,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                  ),
-                ),
-                onPressed: _openScanQrDialog,
-                icon: const Icon(
-                  Icons.keyboard_alt_outlined,
-                  size: 18,
-                  color: Color(0xFF1A237E),
-                ),
-                label: const Text(
-                  'Input Kode Manual',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis,
-                ),
+              onPressed: _openDirectCameraScanner,
+              icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+              label: const Text(
+                'Scan QR Barang',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        // 3: Tombol Katalog Produk (Ukuran kecil / compact)
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.textPrimary,
-              side: BorderSide(color: Colors.grey.shade300),
-              backgroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              ),
-            ),
-            onPressed: _openProductCatalog,
-            icon: const Icon(
-              Icons.inventory_2_outlined,
-              size: 16,
-              color: AppColors.primary,
-            ),
-            label: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Pilih dari Katalog Produk',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                if (totalItemsCount > 0) ...[
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$totalItemsCount item di keranjang',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
             ),
           ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFE8EAF6),
+                foregroundColor: const Color(0xFF1A237E),
+                elevation: 0,
+                side: const BorderSide(color: Color(0xFFC5CAE9)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 11,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                ),
+              ),
+              onPressed: _openScanQrDialog,
+              icon: const Icon(
+                Icons.keyboard_alt_outlined,
+                size: 18,
+                color: Color(0xFF1A237E),
+              ),
+              label: const Text(
+                'Input Kode Manual',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCatalogButton(int totalItemsCount) {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.textPrimary,
+          side: BorderSide(color: Colors.grey.shade300),
+          backgroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          ),
         ),
-      ],
+        onPressed: _openProductCatalog,
+        icon: const Icon(
+          Icons.inventory_2_outlined,
+          size: 16,
+          color: AppColors.primary,
+        ),
+        label: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Pilih dari Katalog Produk',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            if (totalItemsCount > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$totalItemsCount item di keranjang',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -886,7 +909,7 @@ class _PosPageState extends State<PosPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _cartItems.length,
-              separatorBuilder: (_, __) => const Divider(height: 1),
+              separatorBuilder: (_, _) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = _cartItems[index];
                 return _buildCartItemTile(item, index);
@@ -1041,8 +1064,13 @@ class _PosPageState extends State<PosPage> {
                                 if (!item.isKardus) {
                                   item.qty = item.activeCodes.length;
                                 } else {
-                                  final capacityPerKardus = item.product.qrStock.toInt() > 0 ? item.product.qrStock.toInt() : 1;
-                                  item.qty = item.wrapperQrcodes.length * capacityPerKardus;
+                                  final capacityPerKardus =
+                                      item.product.qrStock.toInt() > 0
+                                      ? item.product.qrStock.toInt()
+                                      : 1;
+                                  item.qty =
+                                      item.wrapperQrcodes.length *
+                                      capacityPerKardus;
                                 }
                               }
                             });
@@ -1178,7 +1206,9 @@ class _PosPageState extends State<PosPage> {
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(7)),
+                        borderRadius: const BorderRadius.horizontal(
+                          left: Radius.circular(7),
+                        ),
                         onTap: () {
                           setState(() {
                             if (item.qty > 1) {
@@ -1202,9 +1232,13 @@ class _PosPageState extends State<PosPage> {
                           height: 30,
                           alignment: Alignment.center,
                           child: Icon(
-                            item.qty == 1 ? Icons.delete_outline_rounded : Icons.remove,
+                            item.qty == 1
+                                ? Icons.delete_outline_rounded
+                                : Icons.remove,
                             size: item.qty == 1 ? 16 : 17,
-                            color: item.qty == 1 ? Colors.red.shade400 : Colors.grey.shade800,
+                            color: item.qty == 1
+                                ? Colors.red.shade400
+                                : Colors.grey.shade800,
                           ),
                         ),
                       ),
@@ -1236,7 +1270,9 @@ class _PosPageState extends State<PosPage> {
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        borderRadius: const BorderRadius.horizontal(right: Radius.circular(7)),
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(7),
+                        ),
                         onTap: () => _incrementItem(index),
                         child: Container(
                           width: 32,
@@ -1402,9 +1438,9 @@ class _PosPageState extends State<PosPage> {
                 pm.name.toLowerCase().contains('qris')
                     ? Icons.qr_code_2_rounded
                     : (pm.name.toLowerCase().contains('transfer') ||
-                            pm.name.toLowerCase().contains('bank')
-                        ? Icons.account_balance_rounded
-                        : Icons.credit_card_rounded),
+                              pm.name.toLowerCase().contains('bank')
+                          ? Icons.account_balance_rounded
+                          : Icons.credit_card_rounded),
                 size: 18,
                 color: isSelected ? Colors.white : AppColors.primary,
               ),

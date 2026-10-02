@@ -458,6 +458,7 @@ class CartItemModel {
         'qrcode': null, // Tidak termasuk di qrcode ketika yang discan kardus
         'wrapper_qrcode': joinedWrapperQr,
         'wrapper_qrcodes': finalWrapperQrs,
+        'contained_qrcodes': product.containedQrcodes,
         if (product.unit != null) 'unit': product.unit,
         if (product.code != null) 'code': product.code,
       };
@@ -498,6 +499,7 @@ class InvoiceItemModel {
   final String? wrapperQrcode;
   final String? unit;
   final String? itemCode;
+  final bool isKardus;
 
   InvoiceItemModel({
     required this.itemId,
@@ -510,6 +512,7 @@ class InvoiceItemModel {
     this.wrapperQrcode,
     this.unit,
     this.itemCode,
+    this.isKardus = false,
   });
 
   factory InvoiceItemModel.fromJson(Map<String, dynamic> json) {
@@ -517,6 +520,30 @@ class InvoiceItemModel {
     final unitObj = itemObj?['unit'] is Map<String, dynamic>
         ? itemObj!['unit'] as Map<String, dynamic>
         : (json['unit'] is Map<String, dynamic> ? json['unit'] as Map<String, dynamic> : null);
+
+    // Deteksi kardus dari field is_kardus atau dari ada tidaknya wrapper_qrcode
+    final rawIsKardus = json['is_kardus'];
+    final hasWrapperQrcode = (json['wrapper_qrcode']?.toString() ?? '').trim().isNotEmpty ||
+        (json['wrapper_qrcodes']?.toString() ?? '').trim().isNotEmpty;
+    final bool isKardus = rawIsKardus == true ||
+        rawIsKardus == 1 ||
+        rawIsKardus?.toString() == '1' ||
+        rawIsKardus?.toString().toLowerCase() == 'true' ||
+        (rawIsKardus == null && hasWrapperQrcode);
+
+    // qrcode: ambil dari singular, atau dari plural (qrcodes = GROUP_CONCAT result)
+    final String? qrcodeVal = isKardus
+        ? null
+        : (json['qrcode']?.toString().trim().isNotEmpty == true
+            ? json['qrcode']?.toString()
+            : (json['qrcodes']?.toString().trim().isNotEmpty == true ? json['qrcodes']?.toString() : null));
+
+    // wrapper_qrcode: ambil dari singular, atau dari plural
+    final String? wrapperQrcodeVal = !isKardus
+        ? null
+        : (json['wrapper_qrcode']?.toString().trim().isNotEmpty == true
+            ? json['wrapper_qrcode']?.toString()
+            : (json['wrapper_qrcodes']?.toString().trim().isNotEmpty == true ? json['wrapper_qrcodes']?.toString() : null));
 
     return InvoiceItemModel(
       itemId: json['item_id'] ?? itemObj?['id'] ?? json['id'],
@@ -528,18 +555,21 @@ class InvoiceItemModel {
       price: double.tryParse(json['price']?.toString() ?? '0') ?? 0.0,
       discount: double.tryParse(json['discount']?.toString() ?? '0') ?? 0.0,
       subTotal: double.tryParse(json['sub_total']?.toString() ?? '0') ?? 0.0,
-      qrcode: json['qrcode']?.toString(),
-      wrapperQrcode: json['wrapper_qrcode']?.toString(),
+      qrcode: qrcodeVal,
+      wrapperQrcode: wrapperQrcodeVal,
       unit: json['unit_measure_name']?.toString() ??
+          json['unit_name']?.toString() ??
           unitObj?['unit_measure_name']?.toString() ??
           (json['unit'] is String ? json['unit']?.toString() : null) ??
           'Pcs',
       itemCode: json['item_code']?.toString() ??
           itemObj?['item_code']?.toString() ??
           json['code']?.toString(),
+      isKardus: isKardus,
     );
   }
 }
+
 
 class InvoiceModel {
   final dynamic id;
@@ -630,13 +660,74 @@ class InvoiceModel {
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     final itemList = <InvoiceItemModel>[];
-    final rawItems = json['details'] ?? json['items'] ?? json['group_details'];
+    final rawItems = json['group_details'] ?? json['items'] ?? json['details'];
     if (rawItems is List) {
+      final parsedItems = <InvoiceItemModel>[];
       for (final item in rawItems) {
         if (item is Map<String, dynamic>) {
-          itemList.add(InvoiceItemModel.fromJson(item));
+          parsedItems.add(InvoiceItemModel.fromJson(item));
         }
       }
+
+      // Grouping gabungan (itemId + price + isKardus) agar barang yang sama
+      // selalu terkonsolidasi menjadi 1 baris, dengan qty terakumulasi & qrcode tergabung
+      final groupedMap = <String, InvoiceItemModel>{};
+      for (final item in parsedItems) {
+        final key = '${item.itemId}_${item.price}_${item.isKardus}';
+        if (!groupedMap.containsKey(key)) {
+          groupedMap[key] = item;
+        } else {
+          final existing = groupedMap[key]!;
+
+          // Gabungkan QR Code satuan (distinct)
+          final existingQrs = (existing.qrcode ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+          if (item.qrcode != null && item.qrcode!.trim().isNotEmpty) {
+            existingQrs.addAll(
+              item.qrcode!
+                  .split(',')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty),
+            );
+          }
+          final mergedQr = existingQrs.isEmpty ? null : existingQrs.join(', ');
+
+          // Gabungkan QR Kemasan kardus (distinct)
+          final existingWrappers = (existing.wrapperQrcode ?? '')
+              .split(',')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toSet();
+          if (item.wrapperQrcode != null && item.wrapperQrcode!.trim().isNotEmpty) {
+            existingWrappers.addAll(
+              item.wrapperQrcode!
+                  .split(',')
+                  .map((s) => s.trim())
+                  .where((s) => s.isNotEmpty),
+            );
+          }
+          final mergedWrapper =
+              existingWrappers.isEmpty ? null : existingWrappers.join(', ');
+
+          groupedMap[key] = InvoiceItemModel(
+            itemId: existing.itemId,
+            itemName: existing.itemName,
+            qty: existing.qty + item.qty,
+            price: existing.price,
+            discount: existing.discount + item.discount,
+            subTotal: existing.subTotal + item.subTotal,
+            qrcode: mergedQr,
+            wrapperQrcode: mergedWrapper,
+            unit: existing.unit,
+            itemCode: existing.itemCode,
+            isKardus: existing.isKardus,
+          );
+        }
+      }
+      itemList.addAll(groupedMap.values);
     }
 
     final branchObj = json['branch'] is Map<String, dynamic> ? json['branch'] as Map<String, dynamic> : null;

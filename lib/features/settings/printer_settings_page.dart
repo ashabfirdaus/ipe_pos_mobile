@@ -5,7 +5,9 @@ import 'package:print_bluetooth_thermal/print_bluetooth_thermal.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/models/pos_models.dart';
 import '../../core/services/printer_service.dart';
+import '../pos/widgets/receipt_preview_dialog.dart';
 
 class PrinterSettingsPage extends StatefulWidget {
   const PrinterSettingsPage({super.key});
@@ -114,6 +116,48 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
         backgroundColor: result.success ? AppColors.success : AppColors.error,
       ),
     );
+  }
+
+  void _handlePreviewSample() {
+    final sampleInvoice = InvoiceModel(
+      id: 9999,
+      invoiceNo: 'POS-SAMPLE-0001',
+      createdAt: DateTime.now().toIso8601String(),
+      branchName: 'Inti Pangan Outlet Demo',
+      cashierName: 'Kasir Demo',
+      paymentMethodName: 'QRIS',
+      promoName: 'Diskon Spesial',
+      subTotal: 150000,
+      discount: 15000,
+      ppn: 0,
+      grandTotal: 135000,
+      cash: 150000,
+      change: 15000,
+      items: [
+        InvoiceItemModel(
+          itemId: 1,
+          itemName: 'WEMEAL - OPOR AYAM (KOTAK)',
+          qty: 2,
+          price: 50000,
+          discount: 0,
+          subTotal: 100000,
+          qrcode: '04AI000002, 04AI000010',
+          unit: 'Pcs',
+        ),
+        InvoiceItemModel(
+          itemId: 2,
+          itemName: 'WEMEAL - TUNA BALADO (KOTAK)',
+          qty: 1,
+          price: 50000,
+          discount: 0,
+          subTotal: 50000,
+          qrcode: '2609106151',
+          unit: 'Pcs',
+        ),
+      ],
+    );
+
+    ReceiptPreviewDialog.show(context, invoice: sampleInvoice, isSample: true);
   }
 
   @override
@@ -280,15 +324,29 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
+                    onPressed: _handlePreviewSample,
+                    icon: const Icon(Icons.receipt_long_rounded),
+                    label: const Text('Preview Nota'),
+                  ),
+                ),
+                AppSizes.gapW12,
+                Expanded(
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                    ),
                     onPressed: _isTestingPrint ? null : _handleTestPrint,
                     icon: _isTestingPrint
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
-                        : const Icon(Icons.receipt_long_rounded),
-                    label: const Text('Test Print Nota'),
+                        : const Icon(Icons.print_rounded),
+                    label: const Text('Test Cetak'),
                   ),
                 ),
                 if (isConnected) ...[
@@ -299,7 +357,7 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
                       side: const BorderSide(color: AppColors.error),
                     ),
                     onPressed: _handleDisconnect,
-                    child: const Text('Putuskan'),
+                    child: const Text('Putus'),
                   ),
                 ],
               ],
@@ -525,7 +583,7 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: _devices.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final device = _devices[index];
         final isThisConnected =

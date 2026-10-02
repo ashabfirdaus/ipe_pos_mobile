@@ -8,6 +8,7 @@ import '../../../core/utils/currency_formatter.dart';
 
 import '../../../core/routes/app_routes.dart';
 import '../../../core/services/printer_service.dart';
+import 'receipt_preview_dialog.dart';
 
 class ReceiptDialog extends StatefulWidget {
   final InvoiceModel invoice;
@@ -217,16 +218,36 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               AppSizes.gapH24,
 
               // Action Buttons
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                  side: const BorderSide(color: AppColors.primary),
+                  foregroundColor: AppColors.primary,
+                ),
+                onPressed: () {
+                  ReceiptPreviewDialog.show(context, invoice: widget.invoice);
+                },
+                icon: const Icon(Icons.receipt_long_rounded),
+                label: const Text('Preview Nota Cetak (Thermal)'),
+              ),
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
                       onPressed: _isPrinting ? null : _handlePrint,
                       icon: _isPrinting
                           ? const SizedBox(
                               width: 16,
                               height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
                             )
                           : const Icon(Icons.print_rounded),
                       label: Text(_isPrinting ? 'Mencetak...' : 'Cetak Struk'),
@@ -234,7 +255,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   ),
                   AppSizes.gapW12,
                   Expanded(
-                    child: ElevatedButton(
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(double.infinity, 44),
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                       child: const Text('Selesai'),
                     ),

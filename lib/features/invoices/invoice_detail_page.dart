@@ -9,6 +9,7 @@ import '../../core/services/api_service.dart';
 import '../../core/services/printer_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../pos/widgets/receipt_preview_dialog.dart';
 
 class InvoiceDetailPage extends StatefulWidget {
   final dynamic invoiceId;
@@ -220,7 +221,15 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       appBar: AppBar(
         title: Text(_invoice != null ? _invoice!.invoiceNo : 'Detail Invoice'),
         actions: [
-          if (_invoice != null)
+          if (_invoice != null) ...[
+            IconButton(
+              icon: const Icon(Icons.receipt_long_rounded),
+              tooltip: 'Preview Cetak Nota',
+              onPressed: () => ReceiptPreviewDialog.show(
+                context,
+                invoice: _invoice!,
+              ),
+            ),
             IconButton(
               icon: _isPrinting
                   ? const SizedBox(
@@ -235,6 +244,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
               tooltip: 'Cetak Nota',
               onPressed: _isPrinting ? null : _handlePrint,
             ),
+          ],
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadDetail),
         ],
       ),
@@ -288,29 +298,52 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                     _buildFinancialCard(),
                     AppSizes.gapH24,
 
-                    // Print Receipt Button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                    // Action Buttons: Preview Nota & Cetak Nota
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.primary,
+                                side: const BorderSide(color: AppColors.primary),
+                              ),
+                              icon: const Icon(Icons.receipt_long_rounded),
+                              label: const Text('Preview Nota'),
+                              onPressed: () => ReceiptPreviewDialog.show(
+                                context,
+                                invoice: _invoice!,
+                              ),
+                            ),
+                          ),
                         ),
-                        icon: _isPrinting
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.print_rounded),
-                        label: Text(
-                          _isPrinting ? 'Mencetak Nota...' : 'Cetak Nota',
+                        AppSizes.gapW12,
+                        Expanded(
+                          child: SizedBox(
+                            height: 48,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                              ),
+                              icon: _isPrinting
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : const Icon(Icons.print_rounded),
+                              label: Text(
+                                _isPrinting ? 'Mencetak...' : 'Cetak Nota',
+                              ),
+                              onPressed: _isPrinting ? null : _handlePrint,
+                            ),
+                          ),
                         ),
-                        onPressed: _isPrinting ? null : _handlePrint,
-                      ),
+                      ],
                     ),
                     AppSizes.gapH12,
 
@@ -476,7 +509,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _invoice!.items.length,
-                separatorBuilder: (context, index) => const Divider(height: 16),
+                separatorBuilder: (context, _) => const Divider(height: 16),
                 itemBuilder: (context, index) {
                   final item = _invoice!.items[index];
                   return Row(
@@ -487,75 +520,150 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              item.itemName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                            // QR Satuan
-                            if (item.qrcode != null &&
-                                item.qrcode!.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFE8EAF6),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: const Color(0xFFC5CAE9)),
-                                ),
-                                child: Text(
-                                  'Satuan: ${item.qrcode}',
-                                  style: const TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF283593),
-                                    fontFamily: 'monospace',
+                            // Nama barang + badge tipe (Kardus / Satuan)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.itemName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ],
-                            // QR Kemasan / Kardus
-                            if (item.wrapperQrcode != null &&
-                                item.wrapperQrcode!.isNotEmpty) ...[
-                              const SizedBox(height: 3),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFFF3E0),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(color: const Color(0xFFFFCC80)),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Icon(
-                                      Icons.inventory_2_outlined,
-                                      size: 11,
-                                      color: Color(0xFFE65100),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: item.isKardus
+                                        ? const Color(0xFFFFF3E0)
+                                        : const Color(0xFFE8EAF6),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: item.isKardus
+                                          ? const Color(0xFFFFCC80)
+                                          : const Color(0xFFC5CAE9),
                                     ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'Kemasan: ${item.wrapperQrcode}',
-                                      style: const TextStyle(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFFE65100),
-                                        fontFamily: 'monospace',
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        item.isKardus
+                                            ? Icons.inventory_2_outlined
+                                            : Icons.qr_code_rounded,
+                                        size: 11,
+                                        color: item.isKardus
+                                            ? const Color(0xFFE65100)
+                                            : const Color(0xFF283593),
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        item.isKardus ? 'Kardus' : 'Satuan',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: item.isKardus
+                                              ? const Color(0xFFE65100)
+                                              : const Color(0xFF283593),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
+                              ],
+                            ),
+                            // QR Code Satuan (bisa multiple)
+                            if (!item.isKardus &&
+                                item.qrcode != null &&
+                                item.qrcode!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: item.qrcode!
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .where((s) => s.isNotEmpty)
+                                    .map(
+                                      (qr) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFE8EAF6),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: const Color(0xFFC5CAE9),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          'QR: $qr',
+                                          style: const TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF283593),
+                                            fontFamily: 'monospace',
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
                               ),
                             ],
-                            const SizedBox(height: 2),
+                            // QR Code Kemasan / Kardus (bisa multiple)
+                            if (item.isKardus &&
+                                item.wrapperQrcode != null &&
+                                item.wrapperQrcode!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: item.wrapperQrcode!
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .where((s) => s.isNotEmpty)
+                                    .map(
+                                      (wQr) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFFFF3E0),
+                                          borderRadius: BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: const Color(0xFFFFCC80),
+                                          ),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(
+                                              Icons.inventory_2_outlined,
+                                              size: 11,
+                                              color: Color(0xFFE65100),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'Kemasan: $wQr',
+                                              style: const TextStyle(
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.bold,
+                                                color: Color(0xFFE65100),
+                                                fontFamily: 'monospace',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                            ],
+                            const SizedBox(height: 4),
                             Text(
                               '${item.qty} ${item.unit ?? "pcs"} x ${CurrencyFormatter.format(item.price)}',
                               style: const TextStyle(
@@ -566,6 +674,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                           ],
                         ),
                       ),
+                      const SizedBox(width: 12),
                       Text(
                         CurrencyFormatter.format(item.subTotal),
                         style: const TextStyle(
@@ -581,6 +690,7 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         ),
       ),
     );
+
   }
 
   Widget _buildFinancialCard() {

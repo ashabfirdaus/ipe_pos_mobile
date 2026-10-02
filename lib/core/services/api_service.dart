@@ -9,6 +9,7 @@ import '../models/api_response.dart';
 import '../models/pos_models.dart';
 import '../routes/app_router.dart';
 import '../routes/app_routes.dart';
+import 'offline_sync_service.dart';
 import 'storage_service.dart';
 
 class ApiService {
@@ -68,13 +69,19 @@ class ApiService {
           .get(uri, headers: headers)
           .timeout(ApiConfig.connectTimeout);
 
-      return _processResponse(response, requiresAuth: requiresAuth);
+      final result = _processResponse(response, requiresAuth: requiresAuth);
+      if (result.isSuccess) {
+        OfflineSyncService.instance.setOnlineStatus(true);
+      }
+      return result;
     } on SocketException {
+      OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
         message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Pastikan IP dan port server benar.',
         statusCode: 503,
       );
     } on TimeoutException {
+      OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
         message: 'Koneksi ke server timeout (${ApiConfig.connectTimeout.inSeconds} detik). Cek koneksi Wi-Fi Anda.',
         statusCode: 408,
@@ -102,13 +109,19 @@ class ApiService {
           .post(uri, headers: headers, body: encodedBody)
           .timeout(ApiConfig.connectTimeout);
 
-      return _processResponse(response, requiresAuth: requiresAuth);
+      final result = _processResponse(response, requiresAuth: requiresAuth);
+      if (result.isSuccess) {
+        OfflineSyncService.instance.setOnlineStatus(true);
+      }
+      return result;
     } on SocketException {
+      OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
         message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Periksa jaringan atau IP server.',
         statusCode: 503,
       );
     } on TimeoutException {
+      OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
         message: 'Koneksi ke server timeout. Silakan coba kembali.',
         statusCode: 408,
@@ -321,9 +334,22 @@ class ApiService {
 
     final res = await get(ApiConfig.posInitialData, queryParams: query);
     if (res.isSuccess && res.data is Map<String, dynamic>) {
+      // Simpan cache master data untuk penggunaan saat offline
+      await OfflineSyncService.instance.cacheInitialData(res.data as Map<String, dynamic>);
       final model = PosInitialDataModel.fromJson(res.data as Map<String, dynamic>);
       return ApiResponse.success(data: model, message: res.message);
     }
+
+    // Jika gagal karena masalah koneksi (offline), coba ambil dari cache lokal!
+    final cached = await OfflineSyncService.instance.getCachedInitialData();
+    if (cached != null) {
+      final model = PosInitialDataModel.fromJson(cached);
+      return ApiResponse.success(
+        data: model,
+        message: 'Mode Offline: Menggunakan data master produk dari cache lokal.',
+      );
+    }
+
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
   }
 

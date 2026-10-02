@@ -9,9 +9,12 @@ import '../../core/services/api_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/camera_scanner_page.dart';
 import 'widgets/kardus_conflict_dialog.dart';
+import 'widgets/offline_sync_dialog.dart';
 import 'widgets/receipt_dialog.dart';
 import 'widgets/scan_qr_dialog.dart';
 import 'widgets/stock_qty_confirm_dialog.dart';
+import '../../core/services/offline_sync_service.dart';
+import '../../core/services/storage_service.dart';
 
 class PosPage extends StatefulWidget {
   const PosPage({super.key});
@@ -57,6 +60,9 @@ class _PosPageState extends State<PosPage> {
     if (!mounted) return;
 
     if (initialRes.isSuccess && initialRes.data != null) {
+      // Trigger background sync for pending offline transactions if online
+      OfflineSyncService.instance.syncPendingTransactions();
+
       final initData = initialRes.data!;
       _defaultBranch = initData.defaultBranch;
       _defaultWarehouse = initData.defaultWarehouse;
@@ -655,6 +661,91 @@ class _PosPageState extends State<PosPage> {
         builder: (ctx) => ReceiptDialog(invoice: invoice),
       );
     } else {
+      final isConnectionIssue = res.statusCode == 503 ||
+          res.statusCode == 408 ||
+          res.statusCode == 502 ||
+          res.statusCode == 504 ||
+          res.statusCode == 0 ||
+          res.message.toLowerCase().contains('tidak dapat terhubung') ||
+          res.message.toLowerCase().contains('timeout') ||
+          res.message.toLowerCase().contains('socketexception') ||
+          res.message.toLowerCase().contains('network') ||
+          res.message.toLowerCase().contains('offline');
+
+      if (isConnectionIssue) {
+        final confirmOffline = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.wifi_off_rounded, color: AppColors.warning),
+                SizedBox(width: 8),
+                Text('Koneksi Terputus'),
+              ],
+            ),
+            content: const Text(
+              'Aplikasi tidak dapat terhubung ke server.\n\n'
+              'Apakah Anda ingin menyimpan transaksi ini secara OFFLINE di perangkat dan langsung mencetak struk nota?\n\n'
+              'Data akan tersimpan aman di antrean lokal dan dapat disinkronkan ke server saat jaringan kembali online.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                icon: const Icon(Icons.save_rounded),
+                label: const Text('Simpan Offline & Cetak'),
+                onPressed: () => Navigator.of(ctx).pop(true),
+              ),
+            ],
+          ),
+        );
+
+        if (confirmOffline == true && mounted) {
+          final cashierName = await StorageService.getCashierName();
+          final selectedPm = _paymentMethods
+              .where((p) => p.id == _selectedPaymentMethodId)
+              .firstOrNull;
+
+          final offlineInvoice = await OfflineSyncService.instance.saveOfflineTransaction(
+            payload: payload,
+            cartItems: List<CartItemModel>.from(_cartItems),
+            branchName: _defaultBranch?.name,
+            warehouseName: _defaultWarehouse?.name,
+            paymentMethodName: selectedPm?.name ?? 'Tunai',
+            promoName: _selectedPromo?.name,
+            cashierName: cashierName,
+            discount: _calculateDiscount(),
+            subTotal: _calculateSubTotal(),
+            grandTotal: grandTotal,
+            cash: grandTotal,
+            change: 0.0,
+          );
+
+          setState(() {
+            _cartItems.clear();
+            _selectedPromo = null;
+          });
+
+          _showNotification(
+            'Transaksi disimpan secara Offline (${offlineInvoice.invoiceNo}). Siap dicetak!',
+            backgroundColor: AppColors.success,
+          );
+
+          if (mounted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => ReceiptDialog(invoice: offlineInvoice),
+            );
+          }
+          return;
+        }
+      }
+
       _showNotification(
         res.message.isNotEmpty
             ? res.message
@@ -671,8 +762,80 @@ class _PosPageState extends State<PosPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Kasir POS'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Kasir POS'),
+            const SizedBox(width: 8),
+            ValueListenableBuilder<bool>(
+              valueListenable: OfflineSyncService.instance.isOnlineNotifier,
+              builder: (context, isOnline, _) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isOnline
+                        ? AppColors.success.withValues(alpha: 0.15)
+                        : AppColors.error.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isOnline
+                          ? AppColors.success.withValues(alpha: 0.4)
+                          : AppColors.error.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: isOnline ? AppColors.success : AppColors.error,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        isOnline ? 'Online' : 'Offline',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isOnline ? AppColors.success : AppColors.error,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
         actions: [
+          // Indikator & Tombol Antrean Transaksi Offline
+          ValueListenableBuilder<int>(
+            valueListenable: OfflineSyncService.instance.pendingCountNotifier,
+            builder: (context, pendingCount, child) {
+              if (pendingCount <= 0) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(right: 4.0),
+                child: IconButton(
+                  icon: Badge(
+                    label: Text('$pendingCount'),
+                    backgroundColor: AppColors.warning,
+                    textColor: Colors.black,
+                    child: const Icon(Icons.cloud_upload_rounded, color: AppColors.warning),
+                  ),
+                  tooltip: '$pendingCount Transaksi Offline Belum Disinkronkan',
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => const OfflineSyncDialog(),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
           if (_cartItems.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.delete_sweep_rounded),
@@ -692,6 +855,34 @@ class _PosPageState extends State<PosPage> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
+                  // Banner Mode Offline jika terputus dari server
+                  ValueListenableBuilder<bool>(
+                    valueListenable: OfflineSyncService.instance.isOnlineNotifier,
+                    builder: (context, isOnline, _) {
+                      if (isOnline) return const SizedBox.shrink();
+                      return Container(
+                        width: double.infinity,
+                        color: AppColors.warning.withValues(alpha: 0.15),
+                        padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 6),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.warning),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Mode Offline: Transaksi tersimpan lokal & dicetak langsung. Data otomatis disinkronkan saat terhubung.',
+                                style: AppTextStyles.caption.copyWith(
+                                  color: AppColors.warning,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+
                   // Pinned Top Action Bar: Scan QR Barang & Input Kode Manual
                   _buildPinnedScanSection(),
 

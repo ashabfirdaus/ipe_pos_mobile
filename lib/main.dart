@@ -6,12 +6,14 @@ import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/printer_service.dart';
+import 'core/services/offline_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID', null);
   await StorageService.init();
   await PrinterService.instance.init();
+  await OfflineSyncService.instance.init();
   runApp(const MyApp());
 }
 

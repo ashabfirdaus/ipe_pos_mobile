@@ -23,6 +23,8 @@
                         <constraints>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="1a2-6s-vTC"/>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="4X2-HB-R7a"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="width" secondItem="Ze5-6b-2t3" secondAttribute="width" multiplier="0.8" id="a80-8w-id1"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="width" secondItem="YRO-k0-Ey4" secondAttribute="height" multiplier="5.7853" id="asp-rt-101"/>
                         </constraints>
                     </view>
                 </viewController>
@@ -32,6 +34,6 @@
         </scene>
     </scenes>
     <resources>
-        <image name="LaunchImage" width="260" height="45"/>
+        <image name="LaunchImage" width="312" height="54"/>
     </resources>
 </document>

@@ -5,8 +5,8 @@ class AppConfig {
 
   // App Metadata
   static const String appName = 'IPE - POS';
-  static const String appVersion = '1.0.0';
-  static const String buildNumber = '1';
+  static const String appVersion = '1.0.1';
+  static const String buildNumber = '2';
 
   // Environment mode
   static const AppEnvironment environment = AppEnvironment.production;

@@ -9,6 +9,7 @@ import '../models/api_response.dart';
 import '../models/pos_models.dart';
 import '../routes/app_router.dart';
 import '../routes/app_routes.dart';
+import 'device_info_service.dart';
 import 'offline_sync_service.dart';
 import 'storage_service.dart';
 
@@ -52,7 +53,15 @@ class ApiService {
     if (requiresAuth) {
       token = await StorageService.getAuthToken();
     }
-    return ApiConfig.defaultHeaders(token: token);
+    final headers = ApiConfig.defaultHeaders(token: token);
+    try {
+      final info = await DeviceInfoService.getDeviceInfo();
+      headers['X-Device-Name'] = info.deviceName;
+      headers['X-Device-Id'] = info.deviceId;
+      headers['X-App-Version'] = info.appVersion;
+      headers['X-OS-Version'] = '${info.osName} ${info.osVersion}'.trim();
+    } catch (_) {}
+    return headers;
   }
 
   /// Generic GET request
@@ -245,11 +254,13 @@ class ApiService {
     required String username,
     required String password,
   }) async {
+    final deviceInfo = await DeviceInfoService.getDeviceInfo();
     final res = await post(
       ApiConfig.login,
       body: {
         'username': username,
         'password': password,
+        ...deviceInfo.toMap(),
       },
       requiresAuth: false,
     );

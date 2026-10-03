@@ -7,21 +7,21 @@ import '../../core/models/pos_models.dart';
 import '../../core/services/api_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import 'widgets/camera_scanner_page.dart';
-import 'widgets/kardus_conflict_dialog.dart';
-import 'widgets/stock_qty_confirm_dialog.dart';
 
+/// Halaman Katalog Produk POS (Hanya Menampilkan Informasi Barang & Stok)
+/// Tanpa aksi penambahan ke keranjang belanja
 class PosProductCatalogPage extends StatefulWidget {
   final int? branchId;
   final int? warehouseId;
-  final List<CartItemModel> cartItems;
-  final VoidCallback onCartUpdated;
+  final List<CartItemModel>? cartItems;
+  final VoidCallback? onCartUpdated;
 
   const PosProductCatalogPage({
     super.key,
     required this.branchId,
     required this.warehouseId,
-    required this.cartItems,
-    required this.onCartUpdated,
+    this.cartItems,
+    this.onCartUpdated,
   });
 
   @override
@@ -97,201 +97,29 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     }
   }
 
-  int _getQtyInCart(int productId) {
-    final idx = widget.cartItems.indexWhere((c) => c.product.id == productId);
-    return idx >= 0 ? widget.cartItems[idx].qty : 0;
-  }
-
-  void _addToCart(ProductModel product, {String qrcode = '', int qty = 1}) {
-    if (product.stock <= 0) {
-      _showNotification(
-        'Stok produk sedang kosong!',
-        backgroundColor: AppColors.warning,
-        duration: const Duration(milliseconds: 1200),
-      );
-      return;
-    }
-
-    final effectiveQrcode = qrcode.isNotEmpty
-        ? qrcode
-        : (product.qrcode?.isNotEmpty == true ? product.qrcode! : '');
-
-    if (effectiveQrcode.isNotEmpty) {
-      final isDuplicate = widget.cartItems.any((item) => item.activeCodes.contains(effectiveQrcode));
-      if (isDuplicate) {
-        _showNotification(
-          'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
-          backgroundColor: AppColors.warning,
-        );
-        return;
-      }
-
-      // Cek apakah produk dengan tipe yang SAMA (Kardus dengan Kardus, Satuan dengan Satuan) sudah ada
-      final existingIndex = widget.cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && item.isKardus == product.isKardus,
-      );
-
-      if (existingIndex >= 0) {
-        final existingItem = widget.cartItems[existingIndex];
-        setState(() {
-          if (!existingItem.activeCodes.contains(effectiveQrcode)) {
-            existingItem.activeCodes.add(effectiveQrcode);
-          }
-          existingItem.qty += qty;
-          if (existingItem.qty > existingItem.product.stock) {
-            existingItem.product.stock = existingItem.qty.toDouble();
-          }
-        });
-      } else {
-        setState(() {
-          widget.cartItems.add(
-            CartItemModel(
-              product: product,
-              qty: qty,
-              price: product.price,
-              qrcodes: product.isKardus ? [] : [effectiveQrcode],
-              wrapperQrcodes: product.isKardus ? [effectiveQrcode] : [],
-            ),
-          );
-        });
-      }
-      widget.onCartUpdated();
-    } else {
-      final existingIndex = widget.cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && !item.isKardus,
-      );
-
-      if (existingIndex >= 0) {
-        final existingItem = widget.cartItems[existingIndex];
-        if (existingItem.qty + qty <= product.stock) {
-          setState(() {
-            existingItem.qty += qty;
-          });
-          widget.onCartUpdated();
-        } else {
-          _showNotification(
-            'Jumlah pesanan mencapai batas stok tersedia!',
-            backgroundColor: AppColors.warning,
-            duration: const Duration(milliseconds: 1200),
-          );
-          return;
-        }
-      } else {
-        setState(() {
-          widget.cartItems.add(
-            CartItemModel(
-              product: product,
-              qty: qty,
-              price: product.price,
-              qrcodes: [],
-              wrapperQrcodes: [],
-            ),
-          );
-        });
-        widget.onCartUpdated();
-      }
-    }
-
-    _showNotification('${product.name} berhasil ditambahkan');
-  }
-
-  void _removeFromCart(ProductModel product) {
-    final existingIndex = widget.cartItems.indexWhere(
-      (item) => item.product.id == product.id,
-    );
-    if (existingIndex >= 0) {
-      setState(() {
-        if (widget.cartItems[existingIndex].qty > 1) {
-          widget.cartItems[existingIndex].qty--;
-        } else {
-          widget.cartItems.removeAt(existingIndex);
-        }
-      });
-      widget.onCartUpdated();
-    }
-  }
-
-  Future<void> _openDirectCameraScanner() async {
+  /// Scan barcode / QR untuk mencari produk di dalam katalog
+  Future<void> _scanToSearch() async {
     final scannedCode = await Navigator.of(context).push<String>(
       MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
     );
 
-    // Jika scan dibatalkan / ditutup tanpa mendapatkan QR code, jangan kirim request ke server
-    if (scannedCode == null ||
-        scannedCode.trim().isEmpty ||
-        scannedCode.trim().toLowerCase() == 'null') {
-      return;
-    }
+    if (scannedCode == null || scannedCode.trim().isEmpty) return;
 
     final cleanCode = scannedCode.trim();
-    if (!mounted) return;
-    _showNotification(
-      'Mencari QR Kardus / Satuan: $cleanCode...',
-      duration: const Duration(seconds: 1),
-    );
-
-    final res = await ApiService.scanQr(
-      qrcode: cleanCode,
-      warehouseId: widget.warehouseId,
-      branchId: widget.branchId,
-    );
-
-    if (!mounted) return;
-    if (res.isSuccess && res.data != null) {
-      final product = res.data!;
-      final actualQrCode = product.qrcode?.isNotEmpty == true ? product.qrcode! : cleanCode;
-
-      // Cek konflik Kardus vs Satuan (Opsi 2)
-      final canProceed = await KardusConflictHelper.checkAndResolve(
-        context: context,
-        product: product,
-        cartItems: widget.cartItems,
-        onCartModified: () {
-          setState(() {});
-          widget.onCartUpdated();
-        },
-      );
-      if (!canProceed || !mounted) return;
-
-      int finalQty = 1;
-      if (product.isKardus && product.qrStock > 1) {
-        final chosenQty = await StockQtyConfirmDialog.show(
-          context,
-          product: product,
-          qrcode: actualQrCode,
-        );
-        if (chosenQty == null) return;
-        finalQty = chosenQty;
-      } else if (product.isKardus) {
-        finalQty = product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
-      }
-      _addToCart(product, qrcode: actualQrCode, qty: finalQty);
-    } else {
-      _showNotification(
-        res.message.isNotEmpty
-            ? res.message
-            : 'QR Code Kardus / Satuan "$cleanCode" tidak ditemukan.',
-        backgroundColor: AppColors.error,
-      );
-    }
+    _searchController.text = cleanCode;
+    _loadProducts(search: cleanCode);
   }
-
-  int get _totalCartCount =>
-      widget.cartItems.fold(0, (sum, item) => sum + item.qty);
-
-  double get _totalCartPrice =>
-      widget.cartItems.fold(0.0, (sum, item) => sum + item.subTotal);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Katalog Produk POS'),
+        title: const Text('Katalog Produk'),
         actions: [
           IconButton(
             icon: const Icon(Icons.qr_code_scanner_rounded),
-            tooltip: 'Scan QR / Barcode',
-            onPressed: _openDirectCameraScanner,
+            tooltip: 'Scan untuk Mencari',
+            onPressed: _scanToSearch,
           ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded),
@@ -331,6 +159,30 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
               ),
             ),
 
+            // Indikator Jumlah Produk Ditemukan
+            if (!_isLoading && _products.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSizes.md, 0, AppSizes.md, 10),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.inventory_2_outlined,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Menampilkan ${_products.length} produk di katalog',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Products List
             Expanded(
               child: _isLoading
@@ -348,18 +200,14 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
                           AppSizes.md,
                         ),
                         itemCount: _products.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
+                        separatorBuilder: (_, __) => const SizedBox(height: 10),
                         itemBuilder: (context, index) {
                           final product = _products[index];
-                          final qtyInCart = _getQtyInCart(product.id);
-                          return _buildProductCard(product, qtyInCart);
+                          return _buildProductCard(product);
                         },
                       ),
                     ),
             ),
-
-            // Sticky Bottom Cart Bar
-            if (widget.cartItems.isNotEmpty) _buildBottomBar(),
           ],
         ),
       ),
@@ -401,296 +249,295 @@ class _PosProductCatalogPageState extends State<PosProductCatalogPage> {
     );
   }
 
-  Widget _buildProductCard(ProductModel product, int qtyInCart) {
+  Widget _buildProductCard(ProductModel product) {
     final isOutOfStock = product.stock <= 0;
+    final unitName = product.unit?.isNotEmpty == true ? product.unit! : 'Pcs';
 
-    return Card(
-      elevation: qtyInCart > 0 ? 3 : 1,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-        side: BorderSide(
-          color: qtyInCart > 0 ? AppColors.primary : Colors.grey.shade200,
-          width: qtyInCart > 0 ? 1.5 : 1,
+    return InkWell(
+      onTap: () => _showProductDetailModal(context, product),
+      borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+      child: Card(
+        margin: EdgeInsets.zero,
+        elevation: 1,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+          side: BorderSide(
+            color: Colors.grey.shade200,
+            width: 1,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSizes.md),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // Product Icon / Image Avatar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: qtyInCart > 0
-                      ? AppColors.primary.withValues(alpha: 0.12)
-                      : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                ),
-                child: (product.imagePath != null && product.imagePath!.isNotEmpty)
-                    ? Image.network(
-                        product.imagePath!,
-                        width: 52,
-                        height: 52,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Icon(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSizes.md),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Product Icon / Image Avatar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  ),
+                  child: (product.imagePath != null && product.imagePath!.isNotEmpty)
+                      ? Image.network(
+                          product.imagePath!,
+                          width: 56,
+                          height: 56,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.shopping_bag_outlined,
+                            color: Colors.grey.shade600,
+                            size: 28,
+                          ),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                  value: loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                          loadingProgress.expectedTotalBytes!
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                        )
+                      : Icon(
                           Icons.shopping_bag_outlined,
-                          color: qtyInCart > 0
-                              ? AppColors.primary
-                              : Colors.grey.shade600,
+                          color: Colors.grey.shade600,
                           size: 28,
                         ),
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return Center(
-                            child: SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppColors.primary,
-                                value: loadingProgress.expectedTotalBytes != null
-                                    ? loadingProgress.cumulativeBytesLoaded /
-                                        loadingProgress.expectedTotalBytes!
-                                    : null,
-                              ),
-                            ),
-                          );
-                        },
-                      )
-                    : Icon(
-                        Icons.shopping_bag_outlined,
-                        color: qtyInCart > 0
-                            ? AppColors.primary
-                            : Colors.grey.shade600,
-                        size: 28,
-                      ),
-              ),
-            ),
-            AppSizes.gapW12,
-
-            // Product Details
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    product.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  AppSizes.gapH4,
-                  Row(
-                    children: [
-                      // Stock Badge
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isOutOfStock
-                              ? AppColors.error.withValues(alpha: 0.1)
-                              : AppColors.success.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          isOutOfStock
-                              ? 'Stok Habis'
-                              : 'Stok: ${product.stock.toInt()} ${product.unit ?? "pcs"}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isOutOfStock
-                                ? AppColors.error
-                                : AppColors.success,
-                          ),
-                        ),
-                      ),
-                      if (product.barcode != null &&
-                          product.barcode!.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: Text(
-                            product.barcode!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textSecondary,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  AppSizes.gapH6,
-                  Text(
-                    CurrencyFormatter.format(product.price),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            AppSizes.gapW8,
-
-            // Qty Action Controls
-            if (qtyInCart > 0)
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                  border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+              AppSizes.gapW12,
+
+              // Product Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove, size: 18),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 32,
+                    Text(
+                      product.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: AppColors.textPrimary,
                       ),
-                      onPressed: () => _removeFromCart(product),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Text(
-                        '$qtyInCart',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+                    AppSizes.gapH4,
+                    Row(
+                      children: [
+                        // Stock Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isOutOfStock
+                                ? AppColors.error.withValues(alpha: 0.1)
+                                : AppColors.success.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            isOutOfStock
+                                ? 'Stok Habis'
+                                : 'Stok: ${product.stock.toInt()} $unitName',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: isOutOfStock
+                                  ? AppColors.error
+                                  : AppColors.success,
+                            ),
+                          ),
                         ),
-                      ),
+                        if (product.code != null && product.code!.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              product.code!,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textSecondary,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.add, size: 18),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 32,
+                    AppSizes.gapH6,
+                    Text(
+                      CurrencyFormatter.format(product.price),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primary,
                       ),
-                      onPressed: isOutOfStock || qtyInCart >= product.stock
-                          ? null
-                          : () => _addToCart(product),
                     ),
                   ],
                 ),
-              )
-            else
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                  ),
-                ),
-                onPressed: isOutOfStock ? null : () => _addToCart(product),
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
-                label: const Text('Tambah'),
               ),
-          ],
+
+              // Info Arrow
+              Icon(
+                Icons.chevron_right_rounded,
+                color: Colors.grey.shade400,
+                size: 22,
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBottomBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSizes.md,
-        vertical: 12,
+  /// Menampilkan detail lengkap produk saat kartu ditekan
+  void _showProductDetailModal(BuildContext context, ProductModel product) {
+    final isOutOfStock = product.stock <= 0;
+    final unitName = product.unit?.isNotEmpty == true ? product.unit! : 'Pcs';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            offset: const Offset(0, -3),
-            blurRadius: 10,
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Cart Summary
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.shopping_cart_rounded,
-                        size: 16,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$_totalCartCount Produk Terpilih',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    CurrencyFormatter.format(_totalCartPrice),
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                ],
-              ),
-            ),
-            AppSizes.gapW16,
+                ),
+                const SizedBox(height: 16),
 
-            // Selesai & Bayar Button
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 12,
+                // Nama Produk
+                Text(
+                  product.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                const SizedBox(height: 12),
+
+                // Harga
+                Text(
+                  CurrencyFormatter.format(product.price),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              icon: const Icon(Icons.check_circle_outline_rounded),
-              label: const Text(
-                'Selesai & Bayar',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+
+                // Baris Info Detail
+                _buildDetailRow(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Sisa Stok',
+                  value: isOutOfStock
+                      ? 'Stok Habis'
+                      : '${product.stock.toInt()} $unitName',
+                  valueColor: isOutOfStock ? AppColors.error : AppColors.success,
+                ),
+                if (product.code != null && product.code!.isNotEmpty)
+                  _buildDetailRow(
+                    icon: Icons.tag_rounded,
+                    label: 'Kode / SKU',
+                    value: product.code!,
+                  ),
+                if (product.barcode != null && product.barcode!.isNotEmpty)
+                  _buildDetailRow(
+                    icon: Icons.qr_code_2_rounded,
+                    label: 'Barcode',
+                    value: product.barcode!,
+                  ),
+                if (product.categoryName != null && product.categoryName!.isNotEmpty)
+                  _buildDetailRow(
+                    icon: Icons.category_outlined,
+                    label: 'Kategori',
+                    value: product.categoryName!,
+                  ),
+                _buildDetailRow(
+                  icon: Icons.straighten_rounded,
+                  label: 'Satuan',
+                  value: unitName,
+                ),
+
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                    child: const Text('Tutup'),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDetailRow({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? valueColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.textSecondary),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: valueColor ?? AppColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }

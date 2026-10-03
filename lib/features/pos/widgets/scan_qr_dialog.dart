@@ -130,7 +130,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
         : _codeController.text.trim();
     int finalQty = 1;
 
-    if (product.isKardus && product.qrStock > 1) {
+    if (product.qrStock > 1) {
       final chosenQty = await StockQtyConfirmDialog.show(
         context,
         product: product,

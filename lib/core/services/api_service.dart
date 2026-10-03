@@ -417,6 +417,86 @@ class ApiService {
           }
         }
       }
+
+      // Otomatis perbarui cache offline saat berhasil mengunduh katalog
+      if (list.isNotEmpty && (search == null || search.isEmpty)) {
+        OfflineSyncService.instance.cacheProducts(list);
+      }
+
+      return ApiResponse.success(data: list, message: res.message);
+    }
+
+    // Jika gagal terhubung ke server (offline), coba ambil dari penyimpanan lokal perangkat!
+    final cached = await OfflineSyncService.instance.getCachedProducts();
+    if (cached.isNotEmpty) {
+      // Kelompokkan per itemId agar katalog offline menampilkan 1 kartu per produk master (sama persis seperti online)
+      final catalogMap = <int, ProductModel>{};
+      for (final p in cached) {
+        if (!p.isKardus) {
+          if (!catalogMap.containsKey(p.itemId)) {
+            catalogMap[p.itemId] = p;
+          }
+        }
+      }
+      for (final p in cached) {
+        if (!catalogMap.containsKey(p.itemId)) {
+          catalogMap[p.itemId] = p;
+        }
+      }
+
+      var filtered = catalogMap.values.toList();
+      if (search != null && search.isNotEmpty) {
+        final s = search.toLowerCase();
+        filtered = filtered.where((p) {
+          return p.name.toLowerCase().contains(s) ||
+              (p.code?.toLowerCase().contains(s) ?? false) ||
+              (p.barcode?.toLowerCase().contains(s) ?? false) ||
+              (p.qrcode?.toLowerCase().contains(s) ?? false);
+        }).toList();
+      }
+      return ApiResponse.success(
+        data: filtered,
+        message: 'Mode Offline: Menampilkan data produk dari cache lokal.',
+      );
+    }
+
+    return ApiResponse.error(message: res.message, statusCode: res.statusCode);
+  }
+
+  /// Mengambil seluruh lembar QR Code fisik stok yang aktif (Solusi 2: Full Stock QR Sync)
+  static Future<ApiResponse<List<ProductModel>>> getAllStockQrcodes({
+    int? warehouseId,
+    int? branchId,
+  }) async {
+    final query = <String, dynamic>{
+      'limit': 5000,
+    };
+    if (warehouseId != null) query['warehouse_id'] = warehouseId;
+    if (branchId != null) query['branch_id'] = branchId;
+
+    // 1. Coba panggil endpoint dedicated /pos/all-stock-qrcodes
+    var res = await get(ApiConfig.posAllStockQrcodes, queryParams: query);
+
+    // 2. Jika route dedicated belum ada di backend (404/405), fallback ke /pos/products?all_qrcodes=1
+    if (!res.isSuccess && (res.statusCode == 404 || res.statusCode == 405)) {
+      query['all_qrcodes'] = 1;
+      res = await get(ApiConfig.posProducts, queryParams: query);
+    }
+
+    if (res.isSuccess) {
+      final list = <ProductModel>[];
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map
+              ? res.data['products'] ?? res.data['data'] ?? res.data['stocks'] ?? res.data['items']
+              : []);
+      if (items is List) {
+        for (final item in items) {
+          if (item is Map<String, dynamic>) {
+            list.add(ProductModel.fromJson(item));
+          }
+        }
+      }
       return ApiResponse.success(data: list, message: res.message);
     }
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
@@ -433,53 +513,74 @@ class ApiService {
       return ApiResponse.error(message: 'QR Code kosong atau tidak valid.');
     }
 
-    final body = <String, dynamic>{
-      'qrcode': cleanQr,
-    };
-    if (warehouseId != null) body['warehouse_id'] = warehouseId;
-    if (branchId != null) body['branch_id'] = branchId;
+    // 1. Jika online, coba cari ke server
+    if (OfflineSyncService.instance.isOnlineNotifier.value) {
+      try {
+        final body = <String, dynamic>{
+          'qrcode': cleanQr,
+        };
+        if (warehouseId != null) body['warehouse_id'] = warehouseId;
+        if (branchId != null) body['branch_id'] = branchId;
 
-    final res = await post(ApiConfig.posScanQr, body: body);
-    if (res.isSuccess) {
-      final list = <ProductModel>[];
-      if (res.data is List) {
-        for (final item in res.data as List) {
-          if (item is Map<String, dynamic>) {
-            list.add(ProductModel.fromJson(item));
-          }
-        }
-      } else if (res.data is Map<String, dynamic>) {
-        final map = res.data as Map<String, dynamic>;
-        final items = map['products'] ?? map['data'] ?? map['items'];
-        if (items is List) {
-          for (final item in items) {
-            if (item is Map<String, dynamic>) {
-              list.add(ProductModel.fromJson(item));
+        final res = await post(ApiConfig.posScanQr, body: body).timeout(const Duration(milliseconds: 3000));
+        if (res.isSuccess) {
+          final list = <ProductModel>[];
+          if (res.data is List) {
+            for (final item in res.data as List) {
+              if (item is Map<String, dynamic>) {
+                list.add(ProductModel.fromJson(item));
+              }
+            }
+          } else if (res.data is Map<String, dynamic>) {
+            final map = res.data as Map<String, dynamic>;
+            final items = map['products'] ?? map['data'] ?? map['items'];
+            if (items is List) {
+              for (final item in items) {
+                if (item is Map<String, dynamic>) {
+                  list.add(ProductModel.fromJson(item));
+                }
+              }
+            } else if (map.containsKey('name') ||
+                map.containsKey('id') ||
+                map.containsKey('item_name') ||
+                map.containsKey('stock_id')) {
+              list.add(ProductModel.fromJson(map));
             }
           }
-        } else if (map.containsKey('name') ||
-            map.containsKey('id') ||
-            map.containsKey('item_name') ||
-            map.containsKey('stock_id')) {
-          list.add(ProductModel.fromJson(map));
+
+          // Sort results so items whose qrcode ends with the search string appear first (suffix matching)
+          final lowerQr = cleanQr.toLowerCase();
+          list.sort((a, b) {
+            final aQr = a.qrcode?.toLowerCase() ?? '';
+            final bQr = b.qrcode?.toLowerCase() ?? '';
+            final aEnds = aQr.endsWith(lowerQr);
+            final bEnds = bQr.endsWith(lowerQr);
+            if (aEnds && !bEnds) return -1;
+            if (!aEnds && bEnds) return 1;
+            return 0;
+          });
+
+          return ApiResponse.success(data: list, message: res.message);
+        } else if (res.statusCode != 503 && res.statusCode != 408) {
+          return ApiResponse.error(message: res.message, statusCode: res.statusCode);
         }
+      } catch (_) {
+        // Fallback ke pencarian lokal jika server timeout / gagal konek
       }
-
-      // Sort results so items whose qrcode ends with the search string appear first (suffix matching)
-      final lowerQr = cleanQr.toLowerCase();
-      list.sort((a, b) {
-        final aQr = a.qrcode?.toLowerCase() ?? '';
-        final bQr = b.qrcode?.toLowerCase() ?? '';
-        final aEnds = aQr.endsWith(lowerQr);
-        final bEnds = bQr.endsWith(lowerQr);
-        if (aEnds && !bEnds) return -1;
-        if (!aEnds && bEnds) return 1;
-        return 0;
-      });
-
-      return ApiResponse.success(data: list, message: res.message);
     }
-    return ApiResponse.error(message: res.message, statusCode: res.statusCode);
+
+    // 2. Mode Offline: Cari dari database cache lokal perangkat
+    final localList = await OfflineSyncService.instance.searchProductsOffline(cleanQr);
+    if (localList.isNotEmpty) {
+      return ApiResponse.success(
+        data: localList,
+        message: 'Mode Offline: Ditemukan ${localList.length} produk dari cache lokal.',
+      );
+    }
+
+    return ApiResponse.error(
+      message: 'Mode Offline: QR Code / Produk "$cleanQr" tidak ditemukan di cache lokal.',
+    );
   }
 
   /// Scan QR Code / Barcode to retrieve single product & stock
@@ -488,21 +589,53 @@ class ApiService {
     int? warehouseId,
     int? branchId,
   }) async {
-    final listRes = await searchByQrCode(
-      qrcode: qrcode,
-      warehouseId: warehouseId,
-      branchId: branchId,
-    );
-    if (listRes.isSuccess && listRes.data != null && listRes.data!.isNotEmpty) {
-      final exact = listRes.data!.firstWhere(
-        (p) => p.qrcode?.toLowerCase() == qrcode.trim().toLowerCase(),
-        orElse: () => listRes.data!.first,
-      );
-      return ApiResponse.success(data: exact, message: listRes.message);
+    // 1. Jika online, coba cari ke API server dengan fast-timeout (maks 3s)
+    if (OfflineSyncService.instance.isOnlineNotifier.value) {
+      try {
+        final listRes = await searchByQrCode(
+          qrcode: qrcode,
+          warehouseId: warehouseId,
+          branchId: branchId,
+        ).timeout(const Duration(milliseconds: 3000));
+
+        if (listRes.isSuccess && listRes.data != null && listRes.data!.isNotEmpty) {
+          final exact = listRes.data!.firstWhere(
+            (p) => p.qrcode?.toLowerCase() == qrcode.trim().toLowerCase(),
+            orElse: () => listRes.data!.first,
+          );
+          // Simpan / update ke cache offline perangkat
+          OfflineSyncService.instance.saveOrUpdateProductInCache(exact);
+          return ApiResponse.success(data: exact, message: listRes.message);
+        }
+
+        // Jika server berhasil terhubung tetapi produk kosong / tidak ditemukan / ditolak:
+        // Kembalikan pesan riil dari server (misal: "QR tidak ditemukan", "Stok habis", "Gudang tidak cocok")
+        // JANGAN dialihkan ke pesan offline!
+        final statusCode = listRes.statusCode;
+        if (statusCode != 503 && statusCode != 408) {
+          return ApiResponse.error(
+            message: listRes.message.isNotEmpty
+                ? listRes.message
+                : 'QR Code "$qrcode" tidak ditemukan di server untuk cabang/gudang ini.',
+            statusCode: listRes.statusCode,
+          );
+        }
+      } catch (_) {
+        // Jika server benar-benar tidak terhubung (RTO/Timeout/SocketException), baru fallback ke lokal
+      }
     }
+
+    // 2. Fallback Mode Offline: Cari langsung di database/cache lokal perangkat!
+    final localProduct = await OfflineSyncService.instance.findProductOffline(qrcode);
+    if (localProduct != null) {
+      return ApiResponse.success(
+        data: localProduct,
+        message: 'Mode Offline: Barang berhasil ditemukan dari cache lokal.',
+      );
+    }
+
     return ApiResponse.error(
-      message: listRes.message.isNotEmpty ? listRes.message : 'Produk tidak ditemukan.',
-      statusCode: listRes.statusCode,
+      message: 'Mode Offline: Barang dengan kode "$qrcode" tidak ditemukan di cache lokal. Silakan sinkronkan katalog saat online.',
     );
   }
 

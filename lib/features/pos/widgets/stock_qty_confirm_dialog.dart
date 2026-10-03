@@ -50,8 +50,9 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
   @override
   void initState() {
     super.initState();
-    // Default qty awal adalah maksimal stok QR (remaining_qty)
-    _currentQty = widget.maxQty;
+    // Jika kardus, default langsung isi seluruh kardus.
+    // Jika kemasan satuan, default 1 pcs (kasir dapat menaikkan hingga batas stok QR)
+    _currentQty = widget.product.isKardus ? widget.maxQty : 1;
     _controller = TextEditingController(text: _currentQty.toString());
   }
 
@@ -150,7 +151,7 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                       Text(
                         widget.product.isKardus
                             ? 'Konfirmasi Qty Kardus'
-                            : 'Konfirmasi Jumlah Qty',
+                            : 'Konfirmasi Jumlah Qty Kemasan',
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -159,7 +160,7 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                       Text(
                         widget.product.isKardus
                             ? 'Stok dalam Kardus ini: ${widget.maxQty} item'
-                            : 'Stok fisik QR memiliki > 1 barang',
+                            : 'Stok tersedia pada QR ini: ${widget.maxQty} ${widget.product.unit ?? "Pcs"}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,

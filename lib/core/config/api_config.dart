@@ -2,7 +2,7 @@ class ApiConfig {
   ApiConfig._();
 
   // Single source of truth for Base API URL
-  static const String baseUrl = 'http://192.168.110.156:8080/api';
+  static const String baseUrl = 'https://app.intipangan.com/api';
   static const String defaultBaseUrl = baseUrl;
 
   // Connection Timeouts
@@ -20,6 +20,7 @@ class ApiConfig {
   static const String posWarehouses = '/pos/warehouses';
   static const String posProducts = '/pos/products';
   static const String posScanQr = '/pos/scan-qr';
+  static const String posAllStockQrcodes = '/pos/all-stock-qrcodes';
   static const String posInvoices = '/pos/invoices';
   static String posInvoiceDetail(dynamic id) => '/pos/invoices/$id';
   static String posInvoiceVoid(dynamic id) => '/pos/invoices/$id/void';

@@ -385,6 +385,25 @@ class ProductModel {
       }(),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'item_id': itemId,
+    'name': name,
+    'code': code,
+    'barcode': barcode,
+    'price': price,
+    'stock': stock,
+    'remaining_qty': qrStock,
+    'unit': unit,
+    'category_name': categoryName,
+    'image_path': imagePath,
+    'qrcode': qrcode,
+    'is_kardus': isKardus,
+    'qr_type': qrType,
+    'wrapper_qrcode': wrapperQrcode,
+    'contained_qrcodes': containedQrcodes,
+  };
 }
 
 class CartItemModel {

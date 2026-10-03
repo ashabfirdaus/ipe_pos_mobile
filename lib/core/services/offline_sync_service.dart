@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
@@ -90,6 +91,7 @@ class OfflineSyncService {
 
   static const String _keyPendingTransactions = 'offline_pending_transactions';
   static const String _keyCachedInitialData = 'offline_cached_initial_data';
+  static const String _keyCachedProducts = 'offline_cached_products';
 
   /// ValueNotifier untuk memantau jumlah antrean offline secara reaktif di AppBar
   final ValueNotifier<int> pendingCountNotifier = ValueNotifier<int>(0);
@@ -98,19 +100,43 @@ class OfflineSyncService {
   final ValueNotifier<bool> isOnlineNotifier = ValueNotifier<bool>(true);
 
   Timer? _heartbeatTimer;
-  bool _isSyncing = false;
-  bool get isSyncing => _isSyncing;
+  StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
+
+  /// ValueNotifier untuk memantau status sedang proses sinkronisasi atau tidak
+  final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
+
+  /// ValueNotifier untuk memantau pesan status sinkronisasi terkini
+  final ValueNotifier<String?> syncStatusMessageNotifier = ValueNotifier<String?>(null);
+
+  bool get isSyncing => isSyncingNotifier.value;
 
   /// Inisialisasi awal saat aplikasi dibuka
   Future<void> init() async {
     await updatePendingCount();
+    await getCachedProducts(); // Pre-warm cache produk ke RAM
     startConnectivityMonitoring();
   }
 
-  /// Mulai monitoring koneksi ke server secara berkala
-  void startConnectivityMonitoring({Duration interval = const Duration(seconds: 15)}) {
+  /// Mulai monitoring koneksi secara hybrid (connectivity_plus + Socket.connect)
+  void startConnectivityMonitoring({Duration interval = const Duration(seconds: 30)}) {
     _heartbeatTimer?.cancel();
+    _connectivitySubscription?.cancel();
+
+    // 1. Cek konektivitas awal
     checkConnectivity();
+
+    // 2. Event-driven listener dari connectivity_plus (respon instan saat WiFi/Data hidup atau mati)
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      if (results.contains(ConnectivityResult.none)) {
+        // Perangkat tidak terhubung ke jaringan apapun -> Langsung Offline instan
+        setOnlineStatus(false);
+      } else {
+        // Jaringan HP baru saja tersambung -> Langsung uji reachability server tanpa tunggu timer
+        checkConnectivity();
+      }
+    });
+
+    // 3. Heartbeat berkala sebagai fallback verifikasi reachability server backend
     _heartbeatTimer = Timer.periodic(interval, (_) => checkConnectivity());
   }
 
@@ -118,6 +144,8 @@ class OfflineSyncService {
   void stopConnectivityMonitoring() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = null;
+    _connectivitySubscription?.cancel();
+    _connectivitySubscription = null;
   }
 
   /// Cek konektivitas riil ke API server
@@ -135,7 +163,7 @@ class OfflineSyncService {
       isOnlineNotifier.value = true;
 
       // Jika jaringan baru saja pulih dan ada antrean transaksi, picu auto-sync
-      if (wasOffline && pendingCountNotifier.value > 0 && !_isSyncing) {
+      if (wasOffline && pendingCountNotifier.value > 0 && !isSyncing) {
         syncPendingTransactions();
       }
 
@@ -150,7 +178,7 @@ class OfflineSyncService {
   void setOnlineStatus(bool online) {
     final wasOffline = !isOnlineNotifier.value;
     isOnlineNotifier.value = online;
-    if (online && wasOffline && pendingCountNotifier.value > 0 && !_isSyncing) {
+    if (online && wasOffline && pendingCountNotifier.value > 0 && !isSyncing) {
       syncPendingTransactions();
     }
   }
@@ -187,6 +215,280 @@ class OfflineSyncService {
       }
     } catch (_) {}
     return null;
+  }
+
+  List<ProductModel>? _memoryCachedProducts;
+
+  /// Menyimpan daftar produk ke penyimpanan lokal perangkat (RAM + Disk)
+  Future<void> cacheProducts(List<ProductModel> products) async {
+    try {
+      final existingProducts = await getCachedProducts();
+      final productMap = <String, ProductModel>{};
+
+      for (final p in existingProducts) {
+        final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
+        productMap[key] = p;
+      }
+      for (final p in products) {
+        final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
+        productMap[key] = p;
+      }
+
+      // Update RAM cache seketika agar pencarian offline secepat kilat (0 ms)
+      _memoryCachedProducts = productMap.values.toList();
+
+      // Tulis ke disk (SharedPreferences) di latar belakang
+      final prefs = await SharedPreferences.getInstance();
+      final jsonList = productMap.values.map((p) => p.toJson()).toList();
+      await prefs.setString(_keyCachedProducts, jsonEncode(jsonList));
+    } catch (_) {}
+  }
+
+  /// Simpan atau perbarui 1 produk ke dalam cache offline
+  Future<void> saveOrUpdateProductInCache(ProductModel product) async {
+    await cacheProducts([product]);
+  }
+
+  /// Mengambil seluruh data produk (Mengutamakan RAM Cache instan)
+  Future<List<ProductModel>> getCachedProducts() async {
+    // 1. Jika sudah ada di RAM, kembalikan instan tanpa baca disk
+    if (_memoryCachedProducts != null && _memoryCachedProducts!.isNotEmpty) {
+      return _memoryCachedProducts!;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_keyCachedProducts);
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          final list = decoded
+              .whereType<Map>()
+              .map((item) => ProductModel.fromJson(Map<String, dynamic>.from(item)))
+              .toList();
+          _memoryCachedProducts = list;
+          return list;
+        }
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  /// Mencari produk di penyimpanan lokal berdasarkan QR Code, Barcode, SKU, atau akhiran digit
+  Future<ProductModel?> findProductOffline(String queryCode) async {
+    final cleanCode = queryCode.trim().toLowerCase();
+    if (cleanCode.isEmpty || cleanCode == 'null') return null;
+
+    final products = await getCachedProducts();
+    if (products.isEmpty) return null;
+
+    // 1. PRIORITAS UTAMA (Sama persis seperti Backend Online):
+    // Cek apakah kode yang discan adalah QR KARDUS (wrapper_qrcode)
+    for (final p in products) {
+      if (p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase();
+        final wrapper = p.wrapperQrcode?.trim().toLowerCase();
+        if (qr == cleanCode || wrapper == cleanCode) {
+          return p;
+        }
+      }
+    }
+
+    // 2. PRIORITAS KEDUA: Cocok persis pada QR Code SATUAN (kemasan fisik)
+    for (final p in products) {
+      if (!p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase();
+        if (qr == cleanCode) {
+          return p;
+        }
+      }
+    }
+
+    // 3. PRIORITAS KETIGA: Cocok pada daftar child QR (contained_qrcodes di dalam kardus)
+    for (final p in products) {
+      if (p.containedQrcodes.any((c) => c.trim().toLowerCase() == cleanCode)) {
+        return p;
+      }
+    }
+
+    // 4. PRIORITAS KEEMPAT: Cocok persis pada Barcode fisik barang (EAN-13)
+    for (final p in products) {
+      final barcode = p.barcode?.trim().toLowerCase();
+      if (barcode == cleanCode) {
+        return p;
+      }
+    }
+
+    // 5. PRIORITAS KELIMA: Cocok persis pada Kode Barang (Item Code / SKU)
+    for (final p in products) {
+      final code = p.code?.trim().toLowerCase();
+      if (code == cleanCode) {
+        return p;
+      }
+    }
+
+    // 6. PRIORITAS KEENAM: Suffix matching (pencocokan 3-4 digit terakhir kode)
+    // Utamakan Kardus terlebih dahulu jika berakhiran kode tersebut
+    for (final p in products) {
+      if (p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase() ?? '';
+        final wrapper = p.wrapperQrcode?.trim().toLowerCase() ?? '';
+        if ((qr.isNotEmpty && qr.endsWith(cleanCode)) ||
+            (wrapper.isNotEmpty && wrapper.endsWith(cleanCode))) {
+          return p;
+        }
+      }
+    }
+    for (final p in products) {
+      if (!p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase() ?? '';
+        final barcode = p.barcode?.trim().toLowerCase() ?? '';
+        if ((qr.isNotEmpty && qr.endsWith(cleanCode)) ||
+            (barcode.isNotEmpty && barcode.endsWith(cleanCode))) {
+          return p;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Mencari daftar produk di penyimpanan lokal berdasarkan QR Code, Barcode, SKU, atau akhiran digit
+  Future<List<ProductModel>> searchProductsOffline(String queryCode) async {
+    final cleanCode = queryCode.trim().toLowerCase();
+    if (cleanCode.isEmpty || cleanCode == 'null') return [];
+
+    final products = await getCachedProducts();
+    if (products.isEmpty) return [];
+
+    final results = <ProductModel>[];
+    final seenKeys = <String>{};
+
+    void addMatch(ProductModel p) {
+      final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
+      if (!seenKeys.contains(key)) {
+        seenKeys.add(key);
+        results.add(p);
+      }
+    }
+
+    // 1. Prioritas 1: Cocok persis sebagai QR Kardus
+    for (final p in products) {
+      if (p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase();
+        final wrapper = p.wrapperQrcode?.trim().toLowerCase();
+        if (qr == cleanCode || wrapper == cleanCode) {
+          addMatch(p);
+        }
+      }
+    }
+
+    // 2. Prioritas 2: Cocok persis pada QR Code Satuan
+    for (final p in products) {
+      if (!p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase();
+        if (qr == cleanCode) {
+          addMatch(p);
+        }
+      }
+    }
+
+    // 3. Prioritas 3: Cocok pada child QR (contained_qrcodes)
+    for (final p in products) {
+      if (p.containedQrcodes.any((c) => c.trim().toLowerCase() == cleanCode)) {
+        addMatch(p);
+      }
+    }
+
+    // 4. Prioritas 4: Cocok persis pada Barcode fisik atau SKU
+    for (final p in products) {
+      final barcode = p.barcode?.trim().toLowerCase();
+      final code = p.code?.trim().toLowerCase();
+      if (barcode == cleanCode || code == cleanCode) {
+        addMatch(p);
+      }
+    }
+
+    // 5. Prioritas 5: Suffix / partial matching (3-4 digit terakhir)
+    for (final p in products) {
+      if (p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase() ?? '';
+        final wrapper = p.wrapperQrcode?.trim().toLowerCase() ?? '';
+        if ((qr.isNotEmpty && qr.endsWith(cleanCode)) ||
+            (wrapper.isNotEmpty && wrapper.endsWith(cleanCode))) {
+          addMatch(p);
+        }
+      }
+    }
+    for (final p in products) {
+      if (!p.isKardus) {
+        final qr = p.qrcode?.trim().toLowerCase() ?? '';
+        final barcode = p.barcode?.trim().toLowerCase() ?? '';
+        final code = p.code?.trim().toLowerCase() ?? '';
+        final name = p.name.trim().toLowerCase();
+        if ((qr.isNotEmpty && qr.endsWith(cleanCode)) ||
+            (barcode.isNotEmpty && barcode.endsWith(cleanCode)) ||
+            (code.isNotEmpty && code.endsWith(cleanCode)) ||
+            (cleanCode.length >= 3 && name.contains(cleanCode))) {
+          addMatch(p);
+        }
+      }
+    }
+
+    return results;
+  }
+
+  /// Background sync untuk mengunduh katalog produk & seluruh lembar QR stok saat online (Solusi 2)
+  Future<void> syncProductsCatalog({int? warehouseId, int? branchId}) async {
+    if (isSyncingNotifier.value) return;
+    try {
+      isSyncingNotifier.value = true;
+      syncStatusMessageNotifier.value = 'Memperbarui katalog produk & stok QR...';
+
+      // 1. Unduh katalog visual per master produk
+      final catalogRes = await ApiService.getProducts(
+        warehouseId: warehouseId,
+        branchId: branchId,
+        limit: 1000,
+      );
+
+      // 2. Unduh seluruh lembar QR Code fisik stok yang aktif di gudang
+      final stockRes = await ApiService.getAllStockQrcodes(
+        warehouseId: warehouseId,
+        branchId: branchId,
+      );
+
+      final allItems = <ProductModel>[];
+      if (catalogRes.isSuccess && catalogRes.data != null) {
+        allItems.addAll(catalogRes.data!);
+      }
+      if (stockRes.isSuccess && stockRes.data != null) {
+        allItems.addAll(stockRes.data!);
+      }
+
+      if (allItems.isNotEmpty) {
+        await cacheProducts(allItems);
+        final catalogCount = catalogRes.data?.length ?? 0;
+        final qrCount = stockRes.data?.length ?? 0;
+        final msg = qrCount > 0
+            ? '$catalogCount Produk & $qrCount QR Stok siap offline'
+            : 'Katalog ($catalogCount produk) siap offline';
+        syncStatusMessageNotifier.value = msg;
+
+        Future.delayed(const Duration(seconds: 4), () {
+          if (!isSyncingNotifier.value &&
+              syncStatusMessageNotifier.value?.contains('siap offline') == true) {
+            syncStatusMessageNotifier.value = null;
+          }
+        });
+      } else {
+        syncStatusMessageNotifier.value = null;
+      }
+    } catch (_) {
+      syncStatusMessageNotifier.value = null;
+    } finally {
+      isSyncingNotifier.value = false;
+    }
   }
 
   /// Simpan transaksi offline ke antrean lokal
@@ -321,23 +623,26 @@ class OfflineSyncService {
 
   /// Eksekusi sinkronisasi seluruh antrean transaksi offline ke server backend
   Future<({int total, int success, int failed, List<String> messages})> syncPendingTransactions() async {
-    if (_isSyncing) {
+    if (isSyncingNotifier.value) {
       return (total: 0, success: 0, failed: 0, messages: ['Sinkronisasi sedang berjalan...']);
     }
 
-    _isSyncing = true;
     final items = await getPendingTransactions();
     if (items.isEmpty) {
-      _isSyncing = false;
       await updatePendingCount();
       return (total: 0, success: 0, failed: 0, messages: ['Tidak ada antrean transaksi offline.']);
     }
+
+    isSyncingNotifier.value = true;
+    syncStatusMessageNotifier.value = 'Menyinkronkan ${items.length} transaksi offline...';
 
     int successCount = 0;
     int failedCount = 0;
     final messages = <String>[];
 
-    for (final item in items) {
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
+      syncStatusMessageNotifier.value = 'Menyinkronkan transaksi (${i + 1}/${items.length})...';
       try {
         final res = await ApiService.saveInvoice(item.payload);
         if (res.isSuccess) {
@@ -361,8 +666,19 @@ class OfflineSyncService {
       }
     }
 
-    _isSyncing = false;
+    isSyncingNotifier.value = false;
     await updatePendingCount();
+
+    if (successCount > 0) {
+      syncStatusMessageNotifier.value = '$successCount transaksi berhasil disinkronkan!';
+      Future.delayed(const Duration(seconds: 3), () {
+        if (!isSyncingNotifier.value && syncStatusMessageNotifier.value?.contains('berhasil') == true) {
+          syncStatusMessageNotifier.value = null;
+        }
+      });
+    } else {
+      syncStatusMessageNotifier.value = null;
+    }
 
     return (
       total: items.length,

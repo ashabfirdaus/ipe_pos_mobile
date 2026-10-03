@@ -69,6 +69,12 @@ class _PosPageState extends State<PosPage> {
       _selectedBranchId = initData.defaultBranch?.id;
       _selectedWarehouseId = initData.defaultWarehouse?.id;
 
+      // Pre-fetch dan sinkronkan katalog produk ke cache offline perangkat
+      OfflineSyncService.instance.syncProductsCatalog(
+        branchId: _selectedBranchId,
+        warehouseId: _selectedWarehouseId,
+      );
+
       final nonCashMethods = initData.paymentMethods.where((pm) {
         final n = pm.name.toLowerCase();
         final c = (pm.code ?? '').toLowerCase();
@@ -206,9 +212,8 @@ class _PosPageState extends State<PosPage> {
     if (!mounted) return;
     if (res.isSuccess && res.data != null) {
       final product = res.data!;
-      final actualQrCode = product.qrcode?.isNotEmpty == true
-          ? product.qrcode!
-          : cleanCode;
+      final actualQrCode =
+          product.qrcode?.isNotEmpty == true ? product.qrcode! : cleanCode;
 
       // Cek konflik Kardus vs Satuan (Opsi 2)
       final canProceed = await KardusConflictHelper.checkAndResolve(
@@ -223,7 +228,7 @@ class _PosPageState extends State<PosPage> {
       if (!canProceed || !mounted) return;
 
       int finalQty = 1;
-      if (product.isKardus && product.qrStock > 1) {
+      if (product.qrStock > 1) {
         final chosenQty = await StockQtyConfirmDialog.show(
           context,
           product: product,
@@ -322,9 +327,8 @@ class _PosPageState extends State<PosPage> {
       if (!mounted) return;
       if (res.isSuccess && res.data != null) {
         final product = res.data!;
-        final actualQrCode = product.qrcode?.isNotEmpty == true
-            ? product.qrcode!
-            : cleanCode;
+        final actualQrCode =
+            product.qrcode?.isNotEmpty == true ? product.qrcode! : cleanCode;
 
         // Pastikan QR cocok dengan produk yang sama
         if (product.itemId != item.product.itemId) {
@@ -353,9 +357,8 @@ class _PosPageState extends State<PosPage> {
             item.activeCodes.add(actualQrCode);
             if (item.isKardus) {
               item.wrapperQrcodes.add(actualQrCode);
-              final addQty = product.qrStock.toInt() > 0
-                  ? product.qrStock.toInt()
-                  : 1;
+              final addQty =
+                  product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
               item.qty += addQty;
             } else {
               item.qrcodes.add(actualQrCode);
@@ -560,9 +563,8 @@ class _PosPageState extends State<PosPage> {
 
     setState(() => _isProcessingCheckout = true);
 
-    final itemsPayload = _cartItems
-        .map((item) => item.toInvoiceItemJson())
-        .toList();
+    final itemsPayload =
+        _cartItems.map((item) => item.toInvoiceItemJson()).toList();
 
     final payload = <String, dynamic>{
       'branch_id': _selectedBranchId,
@@ -606,8 +608,8 @@ class _PosPageState extends State<PosPage> {
                       : (item.qrcode.isNotEmpty ? item.qrcode : null),
                   wrapperQrcode: item.isKardus
                       ? (item.wrapperQrcodes.isNotEmpty
-                            ? item.wrapperQrcodes.join(', ')
-                            : item.product.wrapperQrcode)
+                          ? item.wrapperQrcodes.join(', ')
+                          : item.product.wrapperQrcode)
                       : null,
                   unit: item.product.unit,
                   itemCode: item.product.code,
@@ -695,7 +697,9 @@ class _PosPageState extends State<PosPage> {
                 child: const Text('Batal'),
               ),
               ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                ),
                 icon: const Icon(Icons.save_rounded),
                 label: const Text('Simpan Offline & Cetak'),
                 onPressed: () => Navigator.of(ctx).pop(true),
@@ -710,7 +714,8 @@ class _PosPageState extends State<PosPage> {
               .where((p) => p.id == _selectedPaymentMethodId)
               .firstOrNull;
 
-          final offlineInvoice = await OfflineSyncService.instance.saveOfflineTransaction(
+          final offlineInvoice =
+              await OfflineSyncService.instance.saveOfflineTransaction(
             payload: payload,
             cartItems: List<CartItemModel>.from(_cartItems),
             branchName: _defaultBranch?.name,
@@ -762,54 +767,7 @@ class _PosPageState extends State<PosPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Kasir POS'),
-            const SizedBox(width: 8),
-            ValueListenableBuilder<bool>(
-              valueListenable: OfflineSyncService.instance.isOnlineNotifier,
-              builder: (context, isOnline, _) {
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isOnline
-                        ? AppColors.success.withValues(alpha: 0.15)
-                        : AppColors.error.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isOnline
-                          ? AppColors.success.withValues(alpha: 0.4)
-                          : AppColors.error.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isOnline ? AppColors.success : AppColors.error,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        isOnline ? 'Online' : 'Offline',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: isOnline ? AppColors.success : AppColors.error,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
+        title: const Text('Kasir POS'),
         actions: [
           // Indikator & Tombol Antrean Transaksi Offline
           ValueListenableBuilder<int>(
@@ -823,7 +781,10 @@ class _PosPageState extends State<PosPage> {
                     label: Text('$pendingCount'),
                     backgroundColor: AppColors.warning,
                     textColor: Colors.black,
-                    child: const Icon(Icons.cloud_upload_rounded, color: AppColors.warning),
+                    child: const Icon(
+                      Icons.cloud_upload_rounded,
+                      color: AppColors.warning,
+                    ),
                   ),
                   tooltip: '$pendingCount Transaksi Offline Belum Disinkronkan',
                   onPressed: () {
@@ -855,34 +816,6 @@ class _PosPageState extends State<PosPage> {
             ? const Center(child: CircularProgressIndicator())
             : Column(
                 children: [
-                  // Banner Mode Offline jika terputus dari server
-                  ValueListenableBuilder<bool>(
-                    valueListenable: OfflineSyncService.instance.isOnlineNotifier,
-                    builder: (context, isOnline, _) {
-                      if (isOnline) return const SizedBox.shrink();
-                      return Container(
-                        width: double.infinity,
-                        color: AppColors.warning.withValues(alpha: 0.15),
-                        padding: const EdgeInsets.symmetric(horizontal: AppSizes.md, vertical: 6),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.wifi_off_rounded, size: 16, color: AppColors.warning),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Mode Offline: Transaksi tersimpan lokal & dicetak langsung. Data otomatis disinkronkan saat terhubung.',
-                                style: AppTextStyles.caption.copyWith(
-                                  color: AppColors.warning,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-
                   // Pinned Top Action Bar: Scan QR Barang & Input Kode Manual
                   _buildPinnedScanSection(),
 
@@ -1031,7 +964,7 @@ class _PosPageState extends State<PosPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Pilih dari Katalog Produk',
+              'Katalog Produk',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
             if (totalItemsCount > 0) ...[
@@ -1100,7 +1033,7 @@ class _PosPageState extends State<PosPage> {
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _cartItems.length,
-              separatorBuilder: (_, _) => const Divider(height: 1),
+              separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (context, index) {
                 final item = _cartItems[index];
                 return _buildCartItemTile(item, index);
@@ -1257,10 +1190,9 @@ class _PosPageState extends State<PosPage> {
                                 } else {
                                   final capacityPerKardus =
                                       item.product.qrStock.toInt() > 0
-                                      ? item.product.qrStock.toInt()
-                                      : 1;
-                                  item.qty =
-                                      item.wrapperQrcodes.length *
+                                          ? item.product.qrStock.toInt()
+                                          : 1;
+                                  item.qty = item.wrapperQrcodes.length *
                                       capacityPerKardus;
                                 }
                               }
@@ -1629,9 +1561,9 @@ class _PosPageState extends State<PosPage> {
                 pm.name.toLowerCase().contains('qris')
                     ? Icons.qr_code_2_rounded
                     : (pm.name.toLowerCase().contains('transfer') ||
-                              pm.name.toLowerCase().contains('bank')
-                          ? Icons.account_balance_rounded
-                          : Icons.credit_card_rounded),
+                            pm.name.toLowerCase().contains('bank')
+                        ? Icons.account_balance_rounded
+                        : Icons.credit_card_rounded),
                 size: 18,
                 color: isSelected ? Colors.white : AppColors.primary,
               ),

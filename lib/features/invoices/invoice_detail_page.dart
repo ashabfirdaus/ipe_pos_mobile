@@ -118,7 +118,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
     if (!_canVoid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Anda tidak memiliki izin untuk membatalkan (void) transaksi ini.'),
+          content: Text(
+              'Anda tidak memiliki izin untuk membatalkan (void) transaksi ini.'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -221,30 +222,6 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
       appBar: AppBar(
         title: Text(_invoice != null ? _invoice!.invoiceNo : 'Detail Invoice'),
         actions: [
-          if (_invoice != null) ...[
-            IconButton(
-              icon: const Icon(Icons.receipt_long_rounded),
-              tooltip: 'Preview Cetak Nota',
-              onPressed: () => ReceiptPreviewDialog.show(
-                context,
-                invoice: _invoice!,
-              ),
-            ),
-            IconButton(
-              icon: _isPrinting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Icon(Icons.print_rounded),
-              tooltip: 'Cetak Nota',
-              onPressed: _isPrinting ? null : _handlePrint,
-            ),
-          ],
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadDetail),
         ],
       ),
@@ -253,119 +230,127 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _errorMessage != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSizes.lg),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.error_outline,
-                        size: 48,
-                        color: AppColors.error,
-                      ),
-                      AppSizes.gapH16,
-                      Text(_errorMessage!, textAlign: TextAlign.center),
-                      AppSizes.gapH16,
-                      ElevatedButton(
-                        onPressed: _loadDetail,
-                        child: const Text('Coba Lagi'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : _invoice == null
-            ? const Center(child: Text('Data tidak ditemukan'))
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSizes.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Status Badge Card
-                    _buildStatusCard(),
-                    AppSizes.gapH16,
-
-                    // Information Card
-                    _buildInfoCard(),
-                    AppSizes.gapH16,
-
-                    // Items List Card
-                    _buildItemsCard(),
-                    AppSizes.gapH16,
-
-                    // Financial Breakdown Card
-                    _buildFinancialCard(),
-                    AppSizes.gapH24,
-
-                    // Action Buttons: Preview Nota & Cetak Nota
-                    Row(
-                      children: [
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.primary,
-                                side: const BorderSide(color: AppColors.primary),
-                              ),
-                              icon: const Icon(Icons.receipt_long_rounded),
-                              label: const Text('Preview Nota'),
-                              onPressed: () => ReceiptPreviewDialog.show(
-                                context,
-                                invoice: _invoice!,
-                              ),
-                            ),
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSizes.lg),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            size: 48,
+                            color: AppColors.error,
                           ),
-                        ),
-                        AppSizes.gapW12,
-                        Expanded(
-                          child: SizedBox(
-                            height: 48,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                              ),
-                              icon: _isPrinting
-                                  ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        color: Colors.white,
-                                        strokeWidth: 2,
-                                      ),
-                                    )
-                                  : const Icon(Icons.print_rounded),
-                              label: Text(
-                                _isPrinting ? 'Mencetak...' : 'Cetak Nota',
-                              ),
-                              onPressed: _isPrinting ? null : _handlePrint,
-                            ),
+                          AppSizes.gapH16,
+                          Text(_errorMessage!, textAlign: TextAlign.center),
+                          AppSizes.gapH16,
+                          ElevatedButton(
+                            onPressed: _loadDetail,
+                            child: const Text('Coba Lagi'),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                    AppSizes.gapH12,
+                  )
+                : _invoice == null
+                    ? const Center(child: Text('Data tidak ditemukan'))
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(AppSizes.md),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Status Badge Card
+                            _buildStatusCard(),
+                            AppSizes.gapH16,
 
-                    // Void Button if Active & Authorized
-                    if (_invoice!.status == 1 && _canVoid)
-                      SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                          ),
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Batalkan Transaksi (Void)'),
-                          onPressed: _showVoidDialog,
+                            // Information Card
+                            _buildInfoCard(),
+                            AppSizes.gapH16,
+
+                            // Items List Card
+                            _buildItemsCard(),
+                            AppSizes.gapH16,
+
+                            // Financial Breakdown Card
+                            _buildFinancialCard(),
+                            AppSizes.gapH24,
+
+                            // Action Buttons: Preview Nota & Cetak Nota
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 48,
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: AppColors.primary,
+                                        side: const BorderSide(
+                                            color: AppColors.primary),
+                                      ),
+                                      icon: const Icon(
+                                          Icons.receipt_long_rounded),
+                                      label: const Text('Preview Nota'),
+                                      onPressed: () =>
+                                          ReceiptPreviewDialog.show(
+                                        context,
+                                        invoice: _invoice!,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                AppSizes.gapW12,
+                                Expanded(
+                                  child: SizedBox(
+                                    height: 48,
+                                    child: ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primary,
+                                      ),
+                                      icon: _isPrinting
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                color: Colors.white,
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          : const Icon(Icons.print_rounded),
+                                      label: Text(
+                                        _isPrinting
+                                            ? 'Mencetak...'
+                                            : 'Cetak Nota',
+                                      ),
+                                      onPressed:
+                                          _isPrinting ? null : _handlePrint,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            AppSizes.gapH12,
+
+                            // Void Button if Active & Authorized
+                            if (_invoice!.status == 1 && _canVoid)
+                              SizedBox(
+                                width: double.infinity,
+                                height: 48,
+                                child: OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: AppColors.error,
+                                    side: const BorderSide(
+                                        color: AppColors.error),
+                                  ),
+                                  icon: const Icon(Icons.cancel_outlined),
+                                  label:
+                                      const Text('Batalkan Transaksi (Void)'),
+                                  onPressed: _showVoidDialog,
+                                ),
+                              ),
+                            AppSizes.gapH24,
+                          ],
                         ),
                       ),
-                    AppSizes.gapH24,
-                  ],
-                ),
-              ),
       ),
     );
   }
@@ -409,18 +394,21 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
             ],
           ),
           if (isVoid) ...[
-            if (_invoice!.voidDesc != null && _invoice!.voidDesc!.trim().isNotEmpty) ...[
+            if (_invoice!.voidDesc != null &&
+                _invoice!.voidDesc!.trim().isNotEmpty) ...[
               AppSizes.gapH8,
               Text(
                 'Alasan: ${_invoice!.voidDesc}',
                 style: const TextStyle(fontSize: 12, color: AppColors.error),
               ),
             ],
-            if (_invoice!.voidByName != null && _invoice!.voidByName!.trim().isNotEmpty) ...[
+            if (_invoice!.voidByName != null &&
+                _invoice!.voidByName!.trim().isNotEmpty) ...[
               const SizedBox(height: 6),
               Row(
                 children: [
-                  const Icon(Icons.person_outline_rounded, size: 14, color: AppColors.error),
+                  const Icon(Icons.person_outline_rounded,
+                      size: 14, color: AppColors.error),
                   const SizedBox(width: 4),
                   Text(
                     'Dibatalkan oleh: ${_invoice!.voidByName}',
@@ -433,15 +421,18 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                 ],
               ),
             ],
-            if (_invoice!.voidAt != null && _invoice!.voidAt!.trim().isNotEmpty) ...[
+            if (_invoice!.voidAt != null &&
+                _invoice!.voidAt!.trim().isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
-                  const Icon(Icons.access_time_rounded, size: 14, color: AppColors.textSecondary),
+                  const Icon(Icons.access_time_rounded,
+                      size: 14, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
                   Text(
                     'Waktu batal: ${CurrencyFormatter.formatDate(_invoice!.voidAt!)}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: const TextStyle(
+                        fontSize: 12, color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -534,7 +525,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: item.isKardus
                                         ? const Color(0xFFFFF3E0)
@@ -594,7 +586,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFE8EAF6),
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
                                           border: Border.all(
                                             color: const Color(0xFFC5CAE9),
                                           ),
@@ -633,7 +626,8 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: const Color(0xFFFFF3E0),
-                                          borderRadius: BorderRadius.circular(4),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
                                           border: Border.all(
                                             color: const Color(0xFFFFCC80),
                                           ),
@@ -690,7 +684,6 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
         ),
       ),
     );
-
   }
 
   Widget _buildFinancialCard() {

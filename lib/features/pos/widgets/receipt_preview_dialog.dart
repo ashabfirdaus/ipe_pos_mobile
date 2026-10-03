@@ -206,7 +206,7 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                               'assets/icon/intipangan_logo.png',
                               height: 38,
                               fit: BoxFit.contain,
-                              errorBuilder: (_, _, _) => const Text(
+                              errorBuilder: (_, __, ___) => const Text(
                                 'INTI PANGAN EKSPOR',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,

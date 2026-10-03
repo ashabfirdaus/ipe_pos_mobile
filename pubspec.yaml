@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.1+2
 
 environment:
-  sdk: ^3.13.2
+  sdk: '>=3.3.0 <4.0.0'
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -38,10 +38,11 @@ dependencies:
   http: ^1.2.2
   intl: ^0.19.0
   mobile_scanner: ^7.4.0
-  print_bluetooth_thermal: ^1.2.4
+  print_bluetooth_thermal: 1.2.1
   esc_pos_utils_plus: ^2.0.4
   permission_handler: 11.3.1
   image: ^4.2.0
+  connectivity_plus: ^6.0.3
 
 dev_dependencies:
   flutter_test:
@@ -52,7 +53,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^6.0.0
+  flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
   change_app_package_name_plus: ^1.6.0
 

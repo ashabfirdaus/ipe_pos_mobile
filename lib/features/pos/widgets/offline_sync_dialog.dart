@@ -180,7 +180,7 @@ class _OfflineSyncDialogState extends State<OfflineSyncDialog> {
                           )
                         : ListView.separated(
                             itemCount: _items.length,
-                            separatorBuilder: (_, _) => const SizedBox(height: 8),
+                            separatorBuilder: (_, __) => const SizedBox(height: 8),
                             itemBuilder: (ctx, index) {
                               final item = _items[index];
                               final invoice = item.localInvoice;

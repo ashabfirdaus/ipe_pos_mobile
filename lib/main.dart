@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'core/services/storage_service.dart';
 import 'core/services/printer_service.dart';
 import 'core/services/offline_sync_service.dart';
+import 'core/widgets/global_network_status_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,9 @@ class MyApp extends StatelessWidget {
       navigatorKey: AppRouter.navigatorKey,
       initialRoute: AppRoutes.initial,
       onGenerateRoute: AppRouter.onGenerateRoute,
+      builder: (context, child) {
+        return GlobalNetworkStatusBar(child: child ?? const SizedBox.shrink());
+      },
     );
   }
 }

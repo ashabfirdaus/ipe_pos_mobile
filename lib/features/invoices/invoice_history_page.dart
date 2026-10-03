@@ -312,17 +312,17 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
+    return const Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSizes.xl),
+        padding: EdgeInsets.all(AppSizes.xl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textSecondary),
+            Icon(Icons.receipt_long_outlined, size: 64, color: AppColors.textSecondary),
             AppSizes.gapH16,
-            const Text('Belum ada transaksi ditemukan', style: AppTextStyles.h3),
+            Text('Belum ada transaksi ditemukan', style: AppTextStyles.h3),
             AppSizes.gapH8,
-            const Text('Transaksi POS yang telah selesai akan muncul di sini.', style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
+            Text('Transaksi POS yang telah selesai akan muncul di sini.', style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
           ],
         ),
       ),

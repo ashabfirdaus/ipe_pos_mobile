@@ -998,15 +998,15 @@ class _PosPageState extends State<PosPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            const Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.shopping_bag_outlined,
                   color: AppColors.primary,
                   size: 20,
                 ),
                 AppSizes.gapW8,
-                const Text('Keranjang Belanja', style: AppTextStyles.h3),
+                Text('Keranjang Belanja', style: AppTextStyles.h3),
               ],
             ),
             if (_cartItems.isNotEmpty)
@@ -1425,15 +1425,15 @@ class _PosPageState extends State<PosPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
-            const Icon(
+            Icon(
               Icons.local_offer_outlined,
               color: AppColors.secondary,
               size: 20,
             ),
             AppSizes.gapW8,
-            const Text('Promo & Diskon', style: AppTextStyles.h3),
+            Text('Promo & Diskon', style: AppTextStyles.h3),
           ],
         ),
         AppSizes.gapH8,
@@ -1539,15 +1539,15 @@ class _PosPageState extends State<PosPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        const Row(
           children: [
-            const Icon(
+            Icon(
               Icons.payment_rounded,
               color: AppColors.primary,
               size: 20,
             ),
             AppSizes.gapW8,
-            const Text('Metode Pembayaran', style: AppTextStyles.h3),
+            Text('Metode Pembayaran', style: AppTextStyles.h3),
           ],
         ),
         AppSizes.gapH8,

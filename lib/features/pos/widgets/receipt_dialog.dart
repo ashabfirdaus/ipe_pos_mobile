@@ -93,7 +93,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               // Success Icon
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: AppColors.successContainer,
                   shape: BoxShape.circle,
                 ),

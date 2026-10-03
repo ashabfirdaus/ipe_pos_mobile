@@ -667,11 +667,11 @@ class _CartSheetState extends State<CartSheet> {
                 children: [
                 // Promo Selector
                 if (widget.promos.isNotEmpty) ...[
-                  Row(
+                  const Row(
                     children: [
-                      const Icon(Icons.local_offer_outlined, size: 18, color: AppColors.secondary),
+                      Icon(Icons.local_offer_outlined, size: 18, color: AppColors.secondary),
                       AppSizes.gapW8,
-                      const Text('Pilih Promo / Diskon:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                      Text('Pilih Promo / Diskon:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   AppSizes.gapH4,

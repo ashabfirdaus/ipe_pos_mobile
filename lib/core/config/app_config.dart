@@ -1,3 +1,5 @@
+import 'package:package_info_plus/package_info_plus.dart';
+
 enum AppEnvironment { development, staging, production }
 
 class AppConfig {
@@ -5,8 +7,21 @@ class AppConfig {
 
   // App Metadata
   static const String appName = 'IPE - POS';
-  static const String appVersion = '1.0.1';
-  static const String buildNumber = '2';
+  static String appVersion = '1.0.1';
+  static String buildNumber = '2';
+
+  /// Inisialisasi pembacaan versi dinamis dari pubspec.yaml / native OS
+  static Future<void> init() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (info.version.isNotEmpty) {
+        appVersion = info.version;
+      }
+      if (info.buildNumber.isNotEmpty) {
+        buildNumber = info.buildNumber;
+      }
+    } catch (_) {}
+  }
 
   // Environment mode
   static const AppEnvironment environment = AppEnvironment.production;

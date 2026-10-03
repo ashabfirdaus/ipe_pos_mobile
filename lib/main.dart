@@ -11,6 +11,7 @@ import 'core/widgets/global_network_status_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.init();
   await initializeDateFormatting('id_ID', null);
   await StorageService.init();
   await PrinterService.instance.init();

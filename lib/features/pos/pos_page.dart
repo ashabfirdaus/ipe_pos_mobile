@@ -524,6 +524,86 @@ class _PosPageState extends State<PosPage> {
     }
   }
 
+  Future<bool> _showBackConfirmationDialog() async {
+    final totalItemsCount = _cartItems.fold(0, (sum, item) => sum + item.qty);
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.warning.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.warning,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
+              child: Text(
+                'Tinggalkan Kasir?',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Terdapat $totalItemsCount barang (${_cartItems.length} jenis item) di dalam keranjang kasir.',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Jika Anda kembali ke halaman utama, daftar barang yang sudah di-scan/dimasukkan ke keranjang ini akan hilang. Yakin ingin keluar?',
+              style: TextStyle(
+                fontSize: 13,
+                color: AppColors.textSecondary,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal / Tetap di Kasir'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+
   Future<void> _handleCheckout() async {
     // Jaminan ketat: item Satuan ber-QR hanya boleh dijual sebanyak QR yang berhasil di-scan
     // Item Kardus tidak dipotong menjadi activeCodes.length karena 1 wrapper QR mewakili seluruh isi kemasan/kardus
@@ -765,9 +845,23 @@ class _PosPageState extends State<PosPage> {
     final totalItemsCount = _cartItems.fold(0, (sum, item) => sum + item.qty);
     final grandTotal = _calculateGrandTotal();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Kasir POS'),
+    return PopScope(
+      canPop: _cartItems.isEmpty,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldLeave = await _showBackConfirmationDialog();
+        if (shouldLeave && context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Kembali',
+            onPressed: () => Navigator.of(context).maybePop(),
+          ),
+          title: const Text('Kasir POS'),
         actions: [
           // Indikator & Tombol Antrean Transaksi Offline
           ValueListenableBuilder<int>(
@@ -861,6 +955,7 @@ class _PosPageState extends State<PosPage> {
                   _buildBottomCheckoutBar(grandTotal),
                 ],
               ),
+        ),
       ),
     );
   }

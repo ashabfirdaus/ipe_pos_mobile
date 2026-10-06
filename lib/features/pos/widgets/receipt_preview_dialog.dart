@@ -127,7 +127,8 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.grey.shade900,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Row(
               children: [
@@ -139,7 +140,9 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    widget.isSample ? 'Preview Contoh Nota' : 'Preview Cetak Nota',
+                    widget.isSample
+                        ? 'Preview Contoh Nota'
+                        : 'Preview Cetak Nota',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -167,7 +170,8 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                   borderRadius: BorderRadius.circular(20),
                   child: const Padding(
                     padding: EdgeInsets.all(4),
-                    child: Icon(Icons.close_rounded, color: Colors.white70, size: 20),
+                    child: Icon(Icons.close_rounded,
+                        color: Colors.white70, size: 20),
                   ),
                 ),
               ],
@@ -231,8 +235,98 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                             ),
                           _buildDashedLine(),
 
+                          // Penanda Transaksi Batal (VOID)
+                          if (widget.invoice.isVoid) ...[
+                            Container(
+                              margin: const EdgeInsets.symmetric(vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 6,
+                                horizontal: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                border: Border.all(
+                                  color: Colors.red.shade700,
+                                  width: 1.5,
+                                ),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Column(
+                                children: [
+                                  Text(
+                                    '*** TRANSAKSI DIBATALKAN ***',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                      color: Colors.red.shade900,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                  Text(
+                                    'STATUS: VOID',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10.5,
+                                      fontFamily: 'monospace',
+                                      color: Colors.red.shade800,
+                                    ),
+                                  ),
+                                  if (widget.invoice.voidDesc != null &&
+                                      widget.invoice.voidDesc!
+                                          .trim()
+                                          .isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'Alasan: ${widget.invoice.voidDesc}',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontFamily: 'monospace',
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            _buildDashedLine(),
+                          ],
+
                           // 2. Info Transaksi
                           _buildMetaRow('No. Inv', widget.invoice.invoiceNo),
+                          if (widget.invoice.isVoid) ...[
+                            _buildMetaRow(
+                              'STATUS',
+                              'DIBATALKAN (VOID)',
+                              valueColor: Colors.red.shade800,
+                              isBold: true,
+                            ),
+                            if (widget.invoice.voidAt != null &&
+                                widget.invoice.voidAt!.trim().isNotEmpty)
+                              _buildMetaRow(
+                                'Wkt Btl',
+                                CurrencyFormatter.formatDate(
+                                    widget.invoice.voidAt!),
+                                valueColor: Colors.red.shade800,
+                              ),
+                            if (widget.invoice.voidByName != null &&
+                                widget.invoice.voidByName!.trim().isNotEmpty)
+                              _buildMetaRow(
+                                'Petugas',
+                                widget.invoice.voidByName!,
+                                valueColor: Colors.red.shade800,
+                              ),
+                            if (widget.invoice.voidDesc != null &&
+                                widget.invoice.voidDesc!.trim().isNotEmpty)
+                              _buildMetaRow(
+                                'Alasan',
+                                widget.invoice.voidDesc!,
+                                valueColor: Colors.red.shade800,
+                              ),
+                          ],
                           _buildMetaRow(
                             'Waktu',
                             CurrencyFormatter.formatDate(
@@ -246,12 +340,14 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                               widget.invoice.cashierName != '-')
                             _buildMetaRow('Kasir', widget.invoice.cashierName!),
                           if (widget.invoice.paymentMethodName != null)
-                            _buildMetaRow('Metode', widget.invoice.paymentMethodName!),
+                            _buildMetaRow(
+                                'Metode', widget.invoice.paymentMethodName!),
 
                           _buildDashedLine(),
 
                           // 3. Daftar Produk
-                          ...widget.invoice.items.map((item) => _buildItemRow(item)),
+                          ...widget.invoice.items
+                              .map((item) => _buildItemRow(item)),
 
                           _buildDashedLine(),
 
@@ -314,29 +410,82 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                           _buildDashedLine(),
 
                           // 5. Footer Struk
-                          const Center(
-                            child: Text(
-                              'Terima Kasih atas Kunjungan Anda!',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'monospace',
+                          if (widget.invoice.isVoid) ...[
+                            Center(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 6,
+                                  horizontal: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.red.shade50,
+                                  border: Border.all(
+                                    color: Colors.red.shade700,
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Text(
+                                      '*** PERHATIAN ***',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                    Text(
+                                      'NOTA INI TIDAK BERLAKU',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w900,
+                                        fontFamily: 'monospace',
+                                        color: Colors.red.shade900,
+                                      ),
+                                    ),
+                                    Text(
+                                      'TRANSAKSI TELAH DIBATALKAN (VOID)',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.bold,
+                                        fontFamily: 'monospace',
+                                        color: Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          const Center(
-                            child: Text(
-                              'Barang yang sudah dibeli\ntidak dapat ditukar/dikembalikan',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 9.5,
-                                fontFamily: 'monospace',
-                                color: Colors.black54,
+                          ] else ...[
+                            const Center(
+                              child: Text(
+                                'Terima Kasih atas Kunjungan Anda!',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 3),
+                            const Center(
+                              child: Text(
+                                'Barang yang sudah dibeli\ntidak dapat ditukar/dikembalikan',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontFamily: 'monospace',
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 10),
                         ],
                       ),
@@ -372,7 +521,8 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                       height: 8,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: isConnected ? AppColors.success : AppColors.warning,
+                        color:
+                            isConnected ? AppColors.success : AppColors.warning,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -384,7 +534,9 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                         style: TextStyle(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w500,
-                          color: isConnected ? Colors.black87 : AppColors.textSecondary,
+                          color: isConnected
+                              ? Colors.black87
+                              : AppColors.textSecondary,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -394,14 +546,17 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                       TextButton(
                         onPressed: () {
                           Navigator.of(context).pop();
-                          Navigator.of(context).pushNamed(AppRoutes.printerSettings);
+                          Navigator.of(context)
+                              .pushNamed(AppRoutes.printerSettings);
                         },
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: const Text('Hubungkan', style: TextStyle(fontSize: 11)),
+                        child: const Text('Hubungkan',
+                            style: TextStyle(fontSize: 11)),
                       ),
                   ],
                 ),
@@ -417,7 +572,8 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           side: BorderSide(color: Colors.grey.shade300),
                         ),
-                        child: const Text('Tutup', style: TextStyle(color: Colors.black87)),
+                        child: const Text('Tutup',
+                            style: TextStyle(color: Colors.black87)),
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -426,7 +582,9 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                       child: ElevatedButton.icon(
                         onPressed: _isPrinting ? null : _handlePrint,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
+                          backgroundColor: widget.invoice.isVoid
+                              ? AppColors.error
+                              : AppColors.primary,
                           padding: const EdgeInsets.symmetric(vertical: 12),
                         ),
                         icon: _isPrinting
@@ -440,7 +598,11 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
                               )
                             : const Icon(Icons.print_rounded, size: 18),
                         label: Text(
-                          _isPrinting ? 'Mencetak...' : 'Cetak Nota',
+                          _isPrinting
+                              ? 'Mencetak...'
+                              : (widget.invoice.isVoid
+                                  ? 'Cetak Nota (Batal)'
+                                  : 'Cetak Nota'),
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                       ),
@@ -507,7 +669,12 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
     );
   }
 
-  Widget _buildMetaRow(String label, String value) {
+  Widget _buildMetaRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.5),
       child: Row(
@@ -527,11 +694,11 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontFamily: 'monospace',
-                fontWeight: FontWeight.w600,
-                color: Colors.black,
+                fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+                color: valueColor ?? Colors.black,
               ),
             ),
           ),
@@ -541,8 +708,10 @@ class _ReceiptPreviewDialogState extends State<ReceiptPreviewDialog> {
   }
 
   Widget _buildItemRow(InvoiceItemModel item) {
-    final unitStr = item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : '';
-    final qtyPriceStr = '${item.qty}$unitStr x ${CurrencyFormatter.format(item.price)}';
+    final unitStr =
+        item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : '';
+    final qtyPriceStr =
+        '${item.qty}$unitStr x ${CurrencyFormatter.format(item.price)}';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),

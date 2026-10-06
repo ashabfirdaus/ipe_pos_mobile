@@ -48,7 +48,8 @@ class ApiService {
   }
 
   /// Get headers with optional authorization token
-  static Future<Map<String, String>> _getHeaders({bool requiresAuth = true}) async {
+  static Future<Map<String, String>> _getHeaders(
+      {bool requiresAuth = true}) async {
     String? token;
     if (requiresAuth) {
       token = await StorageService.getAuthToken();
@@ -86,13 +87,15 @@ class ApiService {
     } on SocketException {
       OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
-        message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Pastikan IP dan port server benar.',
+        message:
+            'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Pastikan IP dan port server benar.',
         statusCode: 503,
       );
     } on TimeoutException {
       OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
-        message: 'Koneksi ke server timeout (${ApiConfig.connectTimeout.inSeconds} detik). Cek koneksi Wi-Fi Anda.',
+        message:
+            'Koneksi ke server timeout (${ApiConfig.connectTimeout.inSeconds} detik). Cek koneksi Wi-Fi Anda.',
         statusCode: 408,
       );
     } catch (e) {
@@ -126,7 +129,8 @@ class ApiService {
     } on SocketException {
       OfflineSyncService.instance.setOnlineStatus(false);
       return ApiResponse.error(
-        message: 'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Periksa jaringan atau IP server.',
+        message:
+            'Tidak dapat terhubung ke server (${ApiConfig.baseUrl}). Periksa jaringan atau IP server.',
         statusCode: 503,
       );
     } on TimeoutException {
@@ -163,7 +167,8 @@ class ApiService {
             ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('Sesi Anda telah berakhir. Silakan masuk kembali.'),
+                content:
+                    Text('Sesi Anda telah berakhir. Silakan masuk kembali.'),
                 backgroundColor: AppColors.error,
                 duration: Duration(seconds: 4),
               ),
@@ -190,28 +195,40 @@ class ApiService {
       json = null;
     }
 
-    final isSuccessStatus = response.statusCode >= 200 && response.statusCode < 300;
+    final isSuccessStatus =
+        response.statusCode >= 200 && response.statusCode < 300;
 
     // Deteksi jika server mengembalikan 401 atau pesan Unauthenticated
     final isUnauthenticated = response.statusCode == 401 ||
-        (json is Map && (
-          json['message']?.toString().toLowerCase().contains('unauthenticated') == true ||
-          json['status']?.toString().toLowerCase() == 'unauthenticated' ||
-          json['error']?.toString().toLowerCase().contains('unauthenticated') == true
-        ));
+        (json is Map &&
+            (json['message']
+                        ?.toString()
+                        .toLowerCase()
+                        .contains('unauthenticated') ==
+                    true ||
+                json['status']?.toString().toLowerCase() == 'unauthenticated' ||
+                json['error']
+                        ?.toString()
+                        .toLowerCase()
+                        .contains('unauthenticated') ==
+                    true));
 
     if (requiresAuth && isUnauthenticated) {
       handleUnauthenticated();
       return ApiResponse.error(
-        message: 'Sesi telah berakhir (Unauthenticated). Silakan masuk kembali.',
+        message:
+            'Sesi telah berakhir (Unauthenticated). Silakan masuk kembali.',
         statusCode: 401,
       );
     }
 
     if (json is Map<String, dynamic>) {
-      final status = json['status']?.toString() ?? (isSuccessStatus ? 'success' : 'error');
+      final status =
+          json['status']?.toString() ?? (isSuccessStatus ? 'success' : 'error');
       final message = json['message']?.toString() ??
-          (isSuccessStatus ? 'Permintaan berhasil' : 'Permintaan gagal (${response.statusCode})');
+          (isSuccessStatus
+              ? 'Permintaan berhasil'
+              : 'Permintaan gagal (${response.statusCode})');
       final data = json['data'] ?? json['result'] ?? json;
       final errors = json['errors'] ?? json['error'];
 
@@ -291,7 +308,9 @@ class ApiService {
     }
 
     return ApiResponse.error(
-      message: res.message.isNotEmpty ? res.message : 'Username atau kata sandi salah.',
+      message: res.message.isNotEmpty
+          ? res.message
+          : 'Username atau kata sandi salah.',
       errors: res.errors,
       statusCode: res.statusCode,
     );
@@ -346,8 +365,10 @@ class ApiService {
     final res = await get(ApiConfig.posInitialData, queryParams: query);
     if (res.isSuccess && res.data is Map<String, dynamic>) {
       // Simpan cache master data untuk penggunaan saat offline
-      await OfflineSyncService.instance.cacheInitialData(res.data as Map<String, dynamic>);
-      final model = PosInitialDataModel.fromJson(res.data as Map<String, dynamic>);
+      await OfflineSyncService.instance
+          .cacheInitialData(res.data as Map<String, dynamic>);
+      final model =
+          PosInitialDataModel.fromJson(res.data as Map<String, dynamic>);
       return ApiResponse.success(data: model, message: res.message);
     }
 
@@ -357,7 +378,8 @@ class ApiService {
       final model = PosInitialDataModel.fromJson(cached);
       return ApiResponse.success(
         data: model,
-        message: 'Mode Offline: Menggunakan data master produk dari cache lokal.',
+        message:
+            'Mode Offline: Menggunakan data master produk dari cache lokal.',
       );
     }
 
@@ -369,7 +391,9 @@ class ApiService {
     final res = await get(ApiConfig.posBranches);
     if (res.isSuccess) {
       final list = <BranchModel>[];
-      final items = res.data is List ? res.data : (res.data is Map ? res.data['branches'] ?? res.data['data'] : []);
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map ? res.data['branches'] ?? res.data['data'] : []);
       if (items is List) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
@@ -383,14 +407,17 @@ class ApiService {
   }
 
   /// Get active warehouses with optional branch filter
-  static Future<ApiResponse<List<WarehouseModel>>> getWarehouses({int? branchId}) async {
+  static Future<ApiResponse<List<WarehouseModel>>> getWarehouses(
+      {int? branchId}) async {
     final query = <String, dynamic>{};
     if (branchId != null) query['branch_id'] = branchId;
 
     final res = await get(ApiConfig.posWarehouses, queryParams: query);
     if (res.isSuccess) {
       final list = <WarehouseModel>[];
-      final items = res.data is List ? res.data : (res.data is Map ? res.data['warehouses'] ?? res.data['data'] : []);
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map ? res.data['warehouses'] ?? res.data['data'] : []);
       if (items is List) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
@@ -409,6 +436,7 @@ class ApiService {
     int? branchId,
     String? search,
     int limit = 50,
+    bool autoCache = true,
   }) async {
     final query = <String, dynamic>{
       'limit': limit,
@@ -420,7 +448,9 @@ class ApiService {
     final res = await get(ApiConfig.posProducts, queryParams: query);
     if (res.isSuccess) {
       final list = <ProductModel>[];
-      final items = res.data is List ? res.data : (res.data is Map ? res.data['products'] ?? res.data['data'] : []);
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map ? res.data['products'] ?? res.data['data'] : []);
       if (items is List) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
@@ -429,9 +459,12 @@ class ApiService {
         }
       }
 
-      // Otomatis perbarui cache offline saat berhasil mengunduh katalog
-      if (list.isNotEmpty && (search == null || search.isEmpty)) {
-        OfflineSyncService.instance.cacheProducts(list);
+      // Otomatis perbarui cache offline saat berhasil mengunduh katalog (jika tidak sedang full sync)
+      if (autoCache &&
+          !OfflineSyncService.instance.isSyncing &&
+          list.isNotEmpty &&
+          (search == null || search.isEmpty)) {
+        OfflineSyncService.instance.cacheProducts(list, clearPrevious: false);
       }
 
       return ApiResponse.success(data: list, message: res.message);
@@ -499,7 +532,10 @@ class ApiService {
       final items = res.data is List
           ? res.data
           : (res.data is Map
-              ? res.data['products'] ?? res.data['data'] ?? res.data['stocks'] ?? res.data['items']
+              ? res.data['products'] ??
+                  res.data['data'] ??
+                  res.data['stocks'] ??
+                  res.data['items']
               : []);
       if (items is List) {
         for (final item in items) {
@@ -533,7 +569,8 @@ class ApiService {
         if (warehouseId != null) body['warehouse_id'] = warehouseId;
         if (branchId != null) body['branch_id'] = branchId;
 
-        final res = await post(ApiConfig.posScanQr, body: body).timeout(const Duration(milliseconds: 3000));
+        final res = await post(ApiConfig.posScanQr, body: body)
+            .timeout(const Duration(milliseconds: 3000));
         if (res.isSuccess) {
           final list = <ProductModel>[];
           if (res.data is List) {
@@ -573,7 +610,8 @@ class ApiService {
 
           return ApiResponse.success(data: list, message: res.message);
         } else if (res.statusCode != 503 && res.statusCode != 408) {
-          return ApiResponse.error(message: res.message, statusCode: res.statusCode);
+          return ApiResponse.error(
+              message: res.message, statusCode: res.statusCode);
         }
       } catch (_) {
         // Fallback ke pencarian lokal jika server timeout / gagal konek
@@ -581,16 +619,19 @@ class ApiService {
     }
 
     // 2. Mode Offline: Cari dari database cache lokal perangkat
-    final localList = await OfflineSyncService.instance.searchProductsOffline(cleanQr);
+    final localList =
+        await OfflineSyncService.instance.searchProductsOffline(cleanQr);
     if (localList.isNotEmpty) {
       return ApiResponse.success(
         data: localList,
-        message: 'Mode Offline: Ditemukan ${localList.length} produk dari cache lokal.',
+        message:
+            'Mode Offline: Ditemukan ${localList.length} produk dari cache lokal.',
       );
     }
 
     return ApiResponse.error(
-      message: 'Mode Offline: QR Code / Produk "$cleanQr" tidak ditemukan di cache lokal.',
+      message:
+          'Mode Offline: QR Code / Produk "$cleanQr" tidak ditemukan di cache lokal.',
     );
   }
 
@@ -609,7 +650,9 @@ class ApiService {
           branchId: branchId,
         ).timeout(const Duration(milliseconds: 3000));
 
-        if (listRes.isSuccess && listRes.data != null && listRes.data!.isNotEmpty) {
+        if (listRes.isSuccess &&
+            listRes.data != null &&
+            listRes.data!.isNotEmpty) {
           final exact = listRes.data!.firstWhere(
             (p) => p.qrcode?.toLowerCase() == qrcode.trim().toLowerCase(),
             orElse: () => listRes.data!.first,
@@ -637,7 +680,8 @@ class ApiService {
     }
 
     // 2. Fallback Mode Offline: Cari langsung di database/cache lokal perangkat!
-    final localProduct = await OfflineSyncService.instance.findProductOffline(qrcode);
+    final localProduct =
+        await OfflineSyncService.instance.findProductOffline(qrcode);
     if (localProduct != null) {
       return ApiResponse.success(
         data: localProduct,
@@ -646,18 +690,21 @@ class ApiService {
     }
 
     return ApiResponse.error(
-      message: 'Mode Offline: Barang dengan kode "$qrcode" tidak ditemukan di cache lokal. Silakan sinkronkan katalog saat online.',
+      message:
+          'Mode Offline: Barang dengan kode "$qrcode" tidak ditemukan di cache lokal. Silakan sinkronkan katalog saat online.',
     );
   }
 
   /// Save POS Cashier Invoice / Transaction
-  static Future<ApiResponse<InvoiceModel>> saveInvoice(Map<String, dynamic> payload) async {
+  static Future<ApiResponse<InvoiceModel>> saveInvoice(
+      Map<String, dynamic> payload) async {
     final res = await post(ApiConfig.posInvoices, body: payload);
     if (res.isSuccess && res.data is Map<String, dynamic>) {
       final invoice = InvoiceModel.fromJson(res.data as Map<String, dynamic>);
       return ApiResponse.success(data: invoice, message: res.message);
     }
-    return ApiResponse.error(message: res.message, errors: res.errors, statusCode: res.statusCode);
+    return ApiResponse.error(
+        message: res.message, errors: res.errors, statusCode: res.statusCode);
   }
 
   /// Get Invoices History with filters and pagination
@@ -681,13 +728,16 @@ class ApiService {
     if (status != null) query['status'] = status;
     if (search != null && search.isNotEmpty) query['search'] = search;
     if (date != null && date.isNotEmpty) query['date'] = date;
-    if (startDate != null && startDate.isNotEmpty) query['start_date'] = startDate;
+    if (startDate != null && startDate.isNotEmpty)
+      query['start_date'] = startDate;
     if (endDate != null && endDate.isNotEmpty) query['end_date'] = endDate;
 
     final res = await get(ApiConfig.posInvoices, queryParams: query);
     if (res.isSuccess) {
       final list = <InvoiceModel>[];
-      final items = res.data is List ? res.data : (res.data is Map ? res.data['invoices'] ?? res.data['data'] : []);
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map ? res.data['invoices'] ?? res.data['data'] : []);
       if (items is List) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
@@ -701,7 +751,8 @@ class ApiService {
   }
 
   /// Get Invoice Detail by ID
-  static Future<ApiResponse<InvoiceModel>> getInvoiceDetail(dynamic invoiceId) async {
+  static Future<ApiResponse<InvoiceModel>> getInvoiceDetail(
+      dynamic invoiceId) async {
     final res = await get(ApiConfig.posInvoiceDetail(invoiceId));
     if (res.isSuccess && res.data is Map<String, dynamic>) {
       final map = res.data as Map<String, dynamic>;
@@ -717,7 +768,8 @@ class ApiService {
   }
 
   /// Void / Cancel POS Invoice
-  static Future<ApiResponse<bool>> voidInvoice(dynamic invoiceId, String voidDesc) async {
+  static Future<ApiResponse<bool>> voidInvoice(
+      dynamic invoiceId, String voidDesc) async {
     final res = await post(
       ApiConfig.posInvoiceVoid(invoiceId),
       body: {'void_desc': voidDesc},
@@ -733,21 +785,26 @@ class ApiService {
   // ==========================================
 
   /// Get Item Transaction Summary
-  static Future<ApiResponse<ItemTransactionSummaryModel>> getItemTransactionSummary(dynamic itemId) async {
+  static Future<ApiResponse<ItemTransactionSummaryModel>>
+      getItemTransactionSummary(dynamic itemId) async {
     final res = await get(ApiConfig.itemTransactionSummary(itemId));
     if (res.isSuccess && res.data is Map<String, dynamic>) {
-      final summary = ItemTransactionSummaryModel.fromJson(res.data as Map<String, dynamic>);
+      final summary = ItemTransactionSummaryModel.fromJson(
+          res.data as Map<String, dynamic>);
       return ApiResponse.success(data: summary, message: res.message);
     }
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
   }
 
   /// Get Item Transaction Details List
-  static Future<ApiResponse<List<ItemTransactionDetailModel>>> getItemTransactionDetails(dynamic itemId) async {
+  static Future<ApiResponse<List<ItemTransactionDetailModel>>>
+      getItemTransactionDetails(dynamic itemId) async {
     final res = await get(ApiConfig.itemTransactionDetails(itemId));
     if (res.isSuccess) {
       final list = <ItemTransactionDetailModel>[];
-      final items = res.data is List ? res.data : (res.data is Map ? res.data['details'] ?? res.data['data'] : []);
+      final items = res.data is List
+          ? res.data
+          : (res.data is Map ? res.data['details'] ?? res.data['data'] : []);
       if (items is List) {
         for (final item in items) {
           if (item is Map<String, dynamic>) {
@@ -761,17 +818,20 @@ class ApiService {
   }
 
   /// Get Item Total Transactions
-  static Future<ApiResponse<dynamic>> getItemTransactionTotal(dynamic itemId) async {
+  static Future<ApiResponse<dynamic>> getItemTransactionTotal(
+      dynamic itemId) async {
     return await get(ApiConfig.itemTransactionTotal(itemId));
   }
 
   /// Get Item Transaction Rows Summary
-  static Future<ApiResponse<dynamic>> getItemTransactionRowsSummary(dynamic itemId) async {
+  static Future<ApiResponse<dynamic>> getItemTransactionRowsSummary(
+      dynamic itemId) async {
     return await get(ApiConfig.itemTransactionRowsSummary(itemId));
   }
 
   /// Get Item Total Transaction Rows
-  static Future<ApiResponse<dynamic>> getItemTransactionTotalRows(dynamic itemId) async {
+  static Future<ApiResponse<dynamic>> getItemTransactionTotalRows(
+      dynamic itemId) async {
     return await get(ApiConfig.itemTransactionTotalRows(itemId));
   }
 

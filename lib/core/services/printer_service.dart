@@ -257,7 +257,8 @@ class PrinterService {
         if (!reconnected) {
           return (
             success: false,
-            message: 'Gagal terhubung ke printer. Pastikan printer menyala & dekat dengan HP.',
+            message:
+                'Gagal terhubung ke printer. Pastikan printer menyala & dekat dengan HP.',
           );
         }
       } else {
@@ -376,13 +377,15 @@ class PrinterService {
         if (!reconnected) {
           return (
             success: false,
-            message: 'Printer belum terhubung. Silakan sambungkan printer di menu Pengaturan Printer.',
+            message:
+                'Printer belum terhubung. Silakan sambungkan printer di menu Pengaturan Printer.',
           );
         }
       } else {
         return (
           success: false,
-          message: 'Printer belum dikonfigurasi. Buka Pengaturan Printer untuk menghubungkan.',
+          message:
+              'Printer belum dikonfigurasi. Buka Pengaturan Printer untuk menghubungkan.',
         );
       }
     }
@@ -414,6 +417,44 @@ class PrinterService {
         );
       }
 
+      final isVoid = invoice.isVoid;
+
+      // Penanda Visual Pembatalan di bagian atas struk
+      if (isVoid) {
+        bytes += generator.text(
+          '================================',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          '*** TRANSAKSI DIBATALKAN ***',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontA,
+            height: PosTextSize.size1,
+            width: PosTextSize.size1,
+          ),
+        );
+        bytes += generator.text(
+          '*** (STATUS: VOID) ***',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          '================================',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+          ),
+        );
+      }
+
       bytes += generator.hr();
 
       // 2. Info Transaksi (Font B - Kecil & Ringkas)
@@ -421,6 +462,34 @@ class PrinterService {
         'No. Inv : ${invoice.invoiceNo}',
         styles: const PosStyles(fontType: PosFontType.fontB),
       );
+      if (isVoid) {
+        bytes += generator.text(
+          'STATUS  : BATAL / VOID',
+          styles: const PosStyles(
+            fontType: PosFontType.fontB,
+            bold: true,
+          ),
+        );
+        if (invoice.voidAt != null && invoice.voidAt!.trim().isNotEmpty) {
+          bytes += generator.text(
+            'Wkt Btl : ${CurrencyFormatter.formatDate(invoice.voidAt!)}',
+            styles: const PosStyles(fontType: PosFontType.fontB),
+          );
+        }
+        if (invoice.voidByName != null &&
+            invoice.voidByName!.trim().isNotEmpty) {
+          bytes += generator.text(
+            'Petugas : ${invoice.voidByName}',
+            styles: const PosStyles(fontType: PosFontType.fontB),
+          );
+        }
+        if (invoice.voidDesc != null && invoice.voidDesc!.trim().isNotEmpty) {
+          bytes += generator.text(
+            'Alasan  : ${invoice.voidDesc}',
+            styles: const PosStyles(fontType: PosFontType.fontB),
+          );
+        }
+      }
       bytes += generator.text(
         'Waktu   : ${CurrencyFormatter.formatDate(invoice.createdAt.isNotEmpty ? invoice.createdAt : DateTime.now().toIso8601String())}',
         styles: const PosStyles(fontType: PosFontType.fontB),
@@ -483,9 +552,8 @@ class PrinterService {
         );
 
         // Qty x Harga di kiri, Subtotal di kanan
-        final unitStr = item.unit != null && item.unit!.isNotEmpty
-            ? ' ${item.unit}'
-            : '';
+        final unitStr =
+            item.unit != null && item.unit!.isNotEmpty ? ' ${item.unit}' : '';
         final qtyStr =
             '  ${item.qty}$unitStr x ${CurrencyFormatter.format(item.price)}';
         final subTotalStr = CurrencyFormatter.format(item.subTotal);
@@ -531,8 +599,8 @@ class PrinterService {
       if (invoice.discount > 0) {
         final promoLabel =
             invoice.promoName != null && invoice.promoName!.isNotEmpty
-            ? 'Diskon (${invoice.promoName})'
-            : 'Diskon Promo';
+                ? 'Diskon (${invoice.promoName})'
+                : 'Diskon Promo';
         _addSummaryRow(
           generator,
           bytes,
@@ -593,21 +661,62 @@ class PrinterService {
       bytes += generator.feed(1);
 
       // 5. Footer (Font B)
-      bytes += generator.text(
-        'Terima Kasih atas Kunjungan Anda!',
-        styles: const PosStyles(
-          align: PosAlign.center,
-          bold: true,
-          fontType: PosFontType.fontB,
-        ),
-      );
-      bytes += generator.text(
-        'Barang yang sudah dibeli\ntidak dapat ditukar/dikembalikan',
-        styles: const PosStyles(
-          align: PosAlign.center,
-          fontType: PosFontType.fontB,
-        ),
-      );
+      if (isVoid) {
+        bytes += generator.text(
+          '================================',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          '*** PERHATIAN ***',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          'NOTA INI TIDAK BERLAKU',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          'TRANSAKSI SUDAH DIBATALKAN (VOID)',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          '================================',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+          ),
+        );
+      } else {
+        bytes += generator.text(
+          'Terima Kasih atas Kunjungan Anda!',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            bold: true,
+            fontType: PosFontType.fontB,
+          ),
+        );
+        bytes += generator.text(
+          'Barang yang sudah dibeli\ntidak dapat ditukar/dikembalikan',
+          styles: const PosStyles(
+            align: PosAlign.center,
+            fontType: PosFontType.fontB,
+          ),
+        );
+      }
 
       // Mengurangi space kosong bagian bawah: generator.cut() otomatis menambahkan 5 empty lines.
       // Cukup 1 feed agar pas di garis sobek (tear-bar) tanpa space kosong berlebih.
@@ -620,7 +729,9 @@ class PrinterService {
       return (
         success: printResult,
         message: printResult
-            ? 'Nota berhasil dicetak!'
+            ? (isVoid
+                ? 'Nota pembatalan (VOID) berhasil dicetak!'
+                : 'Nota berhasil dicetak!')
             : 'Gagal mengirim data ke printer.',
       );
     } catch (e) {

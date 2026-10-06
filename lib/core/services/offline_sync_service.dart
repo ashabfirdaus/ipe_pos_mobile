@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../models/pos_models.dart';
@@ -71,7 +72,8 @@ class OfflineTransactionItem {
     return OfflineTransactionItem(
       localId: json['local_id']?.toString() ?? '',
       offlineCode: json['offline_code']?.toString() ?? '',
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
+          DateTime.now(),
       payload: json['payload'] is Map<String, dynamic>
           ? Map<String, dynamic>.from(json['payload'])
           : <String, dynamic>{},
@@ -85,7 +87,7 @@ class OfflineTransactionItem {
   }
 }
 
-class OfflineSyncService {
+class OfflineSyncService with WidgetsBindingObserver {
   OfflineSyncService._();
   static final OfflineSyncService instance = OfflineSyncService._();
 
@@ -102,23 +104,83 @@ class OfflineSyncService {
   Timer? _heartbeatTimer;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
 
+  /// Penanda apakah aplikasi sedang diminimize / di background
+  bool _isAppInBackground = false;
+  bool get isAppInBackground => _isAppInBackground;
+
   /// ValueNotifier untuk memantau status sedang proses sinkronisasi atau tidak
   final ValueNotifier<bool> isSyncingNotifier = ValueNotifier<bool>(false);
 
   /// ValueNotifier untuk memantau pesan status sinkronisasi terkini
-  final ValueNotifier<String?> syncStatusMessageNotifier = ValueNotifier<String?>(null);
+  final ValueNotifier<String?> syncStatusMessageNotifier =
+      ValueNotifier<String?>(null);
 
   bool get isSyncing => isSyncingNotifier.value;
 
   /// Inisialisasi awal saat aplikasi dibuka
   Future<void> init() async {
+    WidgetsBinding.instance.addObserver(this);
     await updatePendingCount();
     await getCachedProducts(); // Pre-warm cache produk ke RAM
     startConnectivityMonitoring();
   }
 
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    stopConnectivityMonitoring();
+  }
+
+  /// Menangani perubahan siklus hidup aplikasi (minimize / buka kembali)
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _isAppInBackground = false;
+        _onAppResumed();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+        _isAppInBackground = true;
+        _onAppPaused();
+        break;
+      case AppLifecycleState.detached:
+        _isAppInBackground = true;
+        break;
+    }
+  }
+
+  /// Saat aplikasi diminimize ke background:
+  /// Hentikan timer heartbeat agar tidak memicu kegagalan socket tiruan saat OS membatasi network
+  void _onAppPaused() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Saat aplikasi dibuka kembali dari background:
+  /// Aktifkan kembali heartbeat dan segera verifikasi koneksi dengan retry otomatis
+  void _onAppResumed() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (!_isAppInBackground) {
+          checkConnectivity();
+        }
+      },
+    );
+
+    // Beri sedikit jeda (250ms) agar network interface OS selesai unfreeze, lalu cek koneksi
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!_isAppInBackground) {
+        checkConnectivity(retryOnFail: true);
+      }
+    });
+  }
+
   /// Mulai monitoring koneksi secara hybrid (connectivity_plus + Socket.connect)
-  void startConnectivityMonitoring({Duration interval = const Duration(seconds: 30)}) {
+  void startConnectivityMonitoring(
+      {Duration interval = const Duration(seconds: 30)}) {
     _heartbeatTimer?.cancel();
     _connectivitySubscription?.cancel();
 
@@ -126,18 +188,26 @@ class OfflineSyncService {
     checkConnectivity();
 
     // 2. Event-driven listener dari connectivity_plus (respon instan saat WiFi/Data hidup atau mati)
-    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+    _connectivitySubscription =
+        Connectivity().onConnectivityChanged.listen((results) {
+      // Abaikan event saat aplikasi di background / minimize
+      if (_isAppInBackground) return;
+
       if (results.contains(ConnectivityResult.none)) {
-        // Perangkat tidak terhubung ke jaringan apapun -> Langsung Offline instan
-        setOnlineStatus(false);
+        // Konfirmasi dengan socket check sebelum menyimpulkan offline (mencegah false alarm)
+        checkConnectivity();
       } else {
         // Jaringan HP baru saja tersambung -> Langsung uji reachability server tanpa tunggu timer
-        checkConnectivity();
+        checkConnectivity(retryOnFail: true);
       }
     });
 
     // 3. Heartbeat berkala sebagai fallback verifikasi reachability server backend
-    _heartbeatTimer = Timer.periodic(interval, (_) => checkConnectivity());
+    _heartbeatTimer = Timer.periodic(interval, (_) {
+      if (!_isAppInBackground) {
+        checkConnectivity();
+      }
+    });
   }
 
   /// Hentikan monitoring koneksi
@@ -149,16 +219,29 @@ class OfflineSyncService {
   }
 
   /// Cek konektivitas riil ke API server
-  Future<bool> checkConnectivity() async {
-    try {
-      final uri = Uri.parse(ApiConfig.baseUrl);
-      final socket = await Socket.connect(
-        uri.host,
-        uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80),
-        timeout: const Duration(seconds: 3),
-      );
-      socket.destroy();
+  /// [retryOnFail]: Jika true, coba lagi 1x setelah delay singkat (sangat berguna saat baru resume)
+  Future<bool> checkConnectivity({bool retryOnFail = false}) async {
+    // Jangan ubah status jika aplikasi sedang di background / minimize
+    if (_isAppInBackground) {
+      return isOnlineNotifier.value;
+    }
 
+    bool success = await _testSocketConnect();
+
+    // Jika gagal dan retryOnFail aktif (misal radio OS baru bangun dari sleep),
+    // tunggu sebentar lalu coba sekali lagi sebelum memutuskan offline
+    if (!success && retryOnFail && !_isAppInBackground) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (!_isAppInBackground) {
+        success = await _testSocketConnect();
+      }
+    }
+
+    if (_isAppInBackground) {
+      return isOnlineNotifier.value;
+    }
+
+    if (success) {
       final wasOffline = !isOnlineNotifier.value;
       isOnlineNotifier.value = true;
 
@@ -168,14 +251,34 @@ class OfflineSyncService {
       }
 
       return true;
-    } catch (_) {
+    } else {
       isOnlineNotifier.value = false;
+      return false;
+    }
+  }
+
+  Future<bool> _testSocketConnect() async {
+    try {
+      final uri = Uri.parse(ApiConfig.baseUrl);
+      final socket = await Socket.connect(
+        uri.host,
+        uri.hasPort ? uri.port : (uri.scheme == 'https' ? 443 : 80),
+        timeout: const Duration(seconds: 3),
+      );
+      socket.destroy();
+      return true;
+    } catch (_) {
       return false;
     }
   }
 
   /// Update status online secara instan saat ada panggilan API yang berhasil / gagal
   void setOnlineStatus(bool online) {
+    // Abaikan error koneksi jika aplikasi sedang di background / minimize
+    if (_isAppInBackground && !online) {
+      return;
+    }
+
     final wasOffline = !isOnlineNotifier.value;
     isOnlineNotifier.value = online;
     if (online && wasOffline && pendingCountNotifier.value > 0 && !isSyncing) {
@@ -219,16 +322,38 @@ class OfflineSyncService {
 
   List<ProductModel>? _memoryCachedProducts;
 
-  /// Menyimpan daftar produk ke penyimpanan lokal perangkat (RAM + Disk)
-  Future<void> cacheProducts(List<ProductModel> products) async {
+  /// Menghapus seluruh data stok & produk yang tersimpan di cache lokal (RAM + Disk)
+  Future<void> clearCachedProducts() async {
+    _memoryCachedProducts = null;
     try {
-      final existingProducts = await getCachedProducts();
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyCachedProducts);
+    } catch (_) {}
+  }
+
+  /// Menyimpan daftar produk ke penyimpanan lokal perangkat (RAM + Disk).
+  /// Jika [clearPrevious] bernilai true, data stok sebelumnya akan dihapus terlebih dahulu
+  /// dari RAM dan Disk sebelum memasang stok yang baru.
+  Future<void> cacheProducts(
+    List<ProductModel> products, {
+    bool clearPrevious = false,
+  }) async {
+    try {
       final productMap = <String, ProductModel>{};
 
-      for (final p in existingProducts) {
-        final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
-        productMap[key] = p;
+      if (clearPrevious) {
+        // Hapus data stok sebelumnya terlebih dahulu sebelum memasang stok baru
+        _memoryCachedProducts = null;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_keyCachedProducts);
+      } else {
+        final existingProducts = await getCachedProducts();
+        for (final p in existingProducts) {
+          final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
+          productMap[key] = p;
+        }
       }
+
       for (final p in products) {
         final key = '${p.id}_${p.itemId}_${p.qrcode ?? ''}_${p.isKardus}';
         productMap[key] = p;
@@ -244,9 +369,9 @@ class OfflineSyncService {
     } catch (_) {}
   }
 
-  /// Simpan atau perbarui 1 produk ke dalam cache offline
+  /// Simpan atau perbarui 1 produk ke dalam cache offline tanpa menghapus stok lainnya
   Future<void> saveOrUpdateProductInCache(ProductModel product) async {
-    await cacheProducts([product]);
+    await cacheProducts([product], clearPrevious: false);
   }
 
   /// Mengambil seluruh data produk (Mengutamakan RAM Cache instan)
@@ -264,7 +389,8 @@ class OfflineSyncService {
         if (decoded is List) {
           final list = decoded
               .whereType<Map>()
-              .map((item) => ProductModel.fromJson(Map<String, dynamic>.from(item)))
+              .map((item) =>
+                  ProductModel.fromJson(Map<String, dynamic>.from(item)))
               .toList();
           _memoryCachedProducts = list;
           return list;
@@ -443,13 +569,15 @@ class OfflineSyncService {
     if (isSyncingNotifier.value) return;
     try {
       isSyncingNotifier.value = true;
-      syncStatusMessageNotifier.value = 'Memperbarui katalog produk & stok QR...';
+      syncStatusMessageNotifier.value =
+          'Memperbarui katalog produk & stok QR...';
 
-      // 1. Unduh katalog visual per master produk
+      // 1. Unduh katalog visual per master produk (autoCache: false agar tidak disimpan sebagian)
       final catalogRes = await ApiService.getProducts(
         warehouseId: warehouseId,
         branchId: branchId,
         limit: 1000,
+        autoCache: false,
       );
 
       // 2. Unduh seluruh lembar QR Code fisik stok yang aktif di gudang
@@ -467,7 +595,10 @@ class OfflineSyncService {
       }
 
       if (allItems.isNotEmpty) {
-        await cacheProducts(allItems);
+        // Pastikan data stok sebelumnya dihapus dulu sebelum memasang stok baru
+        await clearCachedProducts();
+        await cacheProducts(allItems, clearPrevious: true);
+
         final catalogCount = catalogRes.data?.length ?? 0;
         final qrCount = stockRes.data?.length ?? 0;
         final msg = qrCount > 0
@@ -477,7 +608,17 @@ class OfflineSyncService {
 
         Future.delayed(const Duration(seconds: 4), () {
           if (!isSyncingNotifier.value &&
-              syncStatusMessageNotifier.value?.contains('siap offline') == true) {
+              syncStatusMessageNotifier.value?.contains('siap offline') ==
+                  true) {
+            syncStatusMessageNotifier.value = null;
+          }
+        });
+      } else if (catalogRes.isSuccess && stockRes.isSuccess) {
+        // Server berhasil dihubungi namun tidak ada produk/stok di cabang/gudang ini
+        await clearCachedProducts();
+        syncStatusMessageNotifier.value = 'Tidak ada data stok di gudang ini.';
+        Future.delayed(const Duration(seconds: 3), () {
+          if (!isSyncingNotifier.value) {
             syncStatusMessageNotifier.value = null;
           }
         });
@@ -507,8 +648,10 @@ class OfflineSyncService {
     double change = 0,
   }) async {
     final now = DateTime.now();
-    final dateStr = '${now.year.toString().substring(2)}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
-    final timeStr = '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
+    final dateStr =
+        '${now.year.toString().substring(2)}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}${now.minute.toString().padLeft(2, '0')}${now.second.toString().padLeft(2, '0')}';
     final randomSuffix = (now.millisecond % 1000).toString().padLeft(3, '0');
     final offlineCode = 'OFFLINE-$dateStr-$timeStr-$randomSuffix';
     final localId = 'local_${now.millisecondsSinceEpoch}';
@@ -525,7 +668,9 @@ class OfflineSyncService {
             subTotal: item.subTotal,
             qrcode: item.isKardus
                 ? null
-                : (item.qrcodes.isNotEmpty ? item.qrcodes.join(', ') : (item.qrcode.isNotEmpty ? item.qrcode : null)),
+                : (item.qrcodes.isNotEmpty
+                    ? item.qrcodes.join(', ')
+                    : (item.qrcode.isNotEmpty ? item.qrcode : null)),
             wrapperQrcode: item.isKardus
                 ? (item.wrapperQrcodes.isNotEmpty
                     ? item.wrapperQrcodes.join(', ')
@@ -561,7 +706,8 @@ class OfflineSyncService {
     // Siapkan payload dengan penanda offline
     final enrichedPayload = Map<String, dynamic>.from(payload);
     enrichedPayload['offline_code'] = offlineCode;
-    enrichedPayload['date'] = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    enrichedPayload['date'] =
+        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     enrichedPayload['created_at'] = now.toIso8601String();
 
     final itemRecord = OfflineTransactionItem(
@@ -573,7 +719,8 @@ class OfflineSyncService {
     );
 
     final prefs = await SharedPreferences.getInstance();
-    final existingRaw = prefs.getStringList(_keyPendingTransactions) ?? <String>[];
+    final existingRaw =
+        prefs.getStringList(_keyPendingTransactions) ?? <String>[];
     existingRaw.add(jsonEncode(itemRecord.toJson()));
     await prefs.setStringList(_keyPendingTransactions, existingRaw);
 
@@ -610,7 +757,8 @@ class OfflineSyncService {
       for (final raw in list) {
         try {
           final decoded = jsonDecode(raw);
-          if (decoded is Map<String, dynamic> && decoded['local_id'] == localId) {
+          if (decoded is Map<String, dynamic> &&
+              decoded['local_id'] == localId) {
             continue; // Hapus
           }
           updatedList.add(raw);
@@ -622,19 +770,31 @@ class OfflineSyncService {
   }
 
   /// Eksekusi sinkronisasi seluruh antrean transaksi offline ke server backend
-  Future<({int total, int success, int failed, List<String> messages})> syncPendingTransactions() async {
+  Future<({int total, int success, int failed, List<String> messages})>
+      syncPendingTransactions() async {
     if (isSyncingNotifier.value) {
-      return (total: 0, success: 0, failed: 0, messages: ['Sinkronisasi sedang berjalan...']);
+      return (
+        total: 0,
+        success: 0,
+        failed: 0,
+        messages: ['Sinkronisasi sedang berjalan...']
+      );
     }
 
     final items = await getPendingTransactions();
     if (items.isEmpty) {
       await updatePendingCount();
-      return (total: 0, success: 0, failed: 0, messages: ['Tidak ada antrean transaksi offline.']);
+      return (
+        total: 0,
+        success: 0,
+        failed: 0,
+        messages: ['Tidak ada antrean transaksi offline.']
+      );
     }
 
     isSyncingNotifier.value = true;
-    syncStatusMessageNotifier.value = 'Menyinkronkan ${items.length} transaksi offline...';
+    syncStatusMessageNotifier.value =
+        'Menyinkronkan ${items.length} transaksi offline...';
 
     int successCount = 0;
     int failedCount = 0;
@@ -642,7 +802,8 @@ class OfflineSyncService {
 
     for (int i = 0; i < items.length; i++) {
       final item = items[i];
-      syncStatusMessageNotifier.value = 'Menyinkronkan transaksi (${i + 1}/${items.length})...';
+      syncStatusMessageNotifier.value =
+          'Menyinkronkan transaksi (${i + 1}/${items.length})...';
       try {
         final res = await ApiService.saveInvoice(item.payload);
         if (res.isSuccess) {
@@ -670,9 +831,11 @@ class OfflineSyncService {
     await updatePendingCount();
 
     if (successCount > 0) {
-      syncStatusMessageNotifier.value = '$successCount transaksi berhasil disinkronkan!';
+      syncStatusMessageNotifier.value =
+          '$successCount transaksi berhasil disinkronkan!';
       Future.delayed(const Duration(seconds: 3), () {
-        if (!isSyncingNotifier.value && syncStatusMessageNotifier.value?.contains('berhasil') == true) {
+        if (!isSyncingNotifier.value &&
+            syncStatusMessageNotifier.value?.contains('berhasil') == true) {
           syncStatusMessageNotifier.value = null;
         }
       });

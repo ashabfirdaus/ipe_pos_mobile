@@ -283,13 +283,22 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                     height: 48,
                                     child: OutlinedButton.icon(
                                       style: OutlinedButton.styleFrom(
-                                        foregroundColor: AppColors.primary,
-                                        side: const BorderSide(
-                                            color: AppColors.primary),
+                                        foregroundColor: _invoice!.isVoid
+                                            ? AppColors.error
+                                            : AppColors.primary,
+                                        side: BorderSide(
+                                          color: _invoice!.isVoid
+                                              ? AppColors.error
+                                              : AppColors.primary,
+                                        ),
                                       ),
                                       icon: const Icon(
                                           Icons.receipt_long_rounded),
-                                      label: const Text('Preview Nota'),
+                                      label: Text(
+                                        _invoice!.isVoid
+                                            ? 'Preview (Batal)'
+                                            : 'Preview Nota',
+                                      ),
                                       onPressed: () =>
                                           ReceiptPreviewDialog.show(
                                         context,
@@ -304,7 +313,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                     height: 48,
                                     child: ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: AppColors.primary,
+                                        backgroundColor: _invoice!.isVoid
+                                            ? AppColors.error
+                                            : AppColors.primary,
                                       ),
                                       icon: _isPrinting
                                           ? const SizedBox(
@@ -319,7 +330,9 @@ class _InvoiceDetailPageState extends State<InvoiceDetailPage> {
                                       label: Text(
                                         _isPrinting
                                             ? 'Mencetak...'
-                                            : 'Cetak Nota',
+                                            : (_invoice!.isVoid
+                                                ? 'Cetak Nota (Batal)'
+                                                : 'Cetak Nota'),
                                       ),
                                       onPressed:
                                           _isPrinting ? null : _handlePrint,

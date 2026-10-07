@@ -203,6 +203,72 @@ class PromoModel {
   }
 }
 
+class SpecialPriceConfigModel {
+  final bool enabled;
+  final bool isCurrentlyActive;
+  final bool isTimeActive;
+  final bool isDayActive;
+  final String startTime;
+  final String endTime;
+  final int dailyQuota;
+  final String scope;
+  final int usedQuotaToday;
+  final int remainingQuotaToday;
+  final bool isQuotaAvailable;
+
+  SpecialPriceConfigModel({
+    required this.enabled,
+    required this.isCurrentlyActive,
+    this.isTimeActive = false,
+    this.isDayActive = true,
+    this.startTime = '18:00:00',
+    this.endTime = '23:59:59',
+    this.dailyQuota = 140,
+    this.scope = 'global',
+    this.usedQuotaToday = 0,
+    this.remainingQuotaToday = 140,
+    this.isQuotaAvailable = true,
+  });
+
+  factory SpecialPriceConfigModel.fromJson(Map<String, dynamic> json) {
+    return SpecialPriceConfigModel(
+      enabled: json['enabled'] == true || json['enabled']?.toString() == '1',
+      isCurrentlyActive: json['is_currently_active'] == true ||
+          json['is_currently_active']?.toString() == '1',
+      isTimeActive: json['is_time_active'] == true,
+      isDayActive: json['is_day_active'] != false,
+      startTime: json['start_time']?.toString() ?? '18:00:00',
+      endTime: json['end_time']?.toString() ?? '23:59:59',
+      dailyQuota:
+          int.tryParse(json['daily_quota']?.toString() ?? '140') ?? 140,
+      scope: json['scope']?.toString() ?? 'global',
+      usedQuotaToday:
+          int.tryParse(json['used_quota_today']?.toString() ?? '0') ?? 0,
+      remainingQuotaToday:
+          int.tryParse(json['remaining_quota_today']?.toString() ?? '140') ??
+              140,
+      isQuotaAvailable: json['is_quota_available'] == true ||
+          (int.tryParse(json['remaining_quota_today']?.toString() ?? '0') ??
+                  0) >
+              0,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'enabled': enabled,
+        'is_currently_active': isCurrentlyActive,
+        'is_time_active': isTimeActive,
+        'is_day_active': isDayActive,
+        'start_time': startTime,
+        'end_time': endTime,
+        'daily_quota': dailyQuota,
+        'scope': scope,
+        'used_quota_today': usedQuotaToday,
+        'remaining_quota_today': remainingQuotaToday,
+        'is_quota_available': isQuotaAvailable,
+      };
+}
+
 class PosInitialDataModel {
   final BranchModel? defaultBranch;
   final WarehouseModel? defaultWarehouse;
@@ -210,6 +276,7 @@ class PosInitialDataModel {
   final List<PromoModel> promos;
   final int defaultPpnType;
   final double ppnRate;
+  final SpecialPriceConfigModel? specialPriceConfig;
 
   PosInitialDataModel({
     this.defaultBranch,
@@ -218,6 +285,7 @@ class PosInitialDataModel {
     required this.promos,
     this.defaultPpnType = 0,
     required this.ppnRate,
+    this.specialPriceConfig,
   });
 
   factory PosInitialDataModel.fromJson(Map<String, dynamic> json) {
@@ -278,6 +346,14 @@ class PosInitialDataModel {
         ) ??
         0;
 
+    SpecialPriceConfigModel? spConfig;
+    if (json['special_price_config'] != null &&
+        json['special_price_config'] is Map) {
+      spConfig = SpecialPriceConfigModel.fromJson(
+        Map<String, dynamic>.from(json['special_price_config'] as Map),
+      );
+    }
+
     return PosInitialDataModel(
       defaultBranch: branch,
       defaultWarehouse: warehouse,
@@ -285,6 +361,7 @@ class PosInitialDataModel {
       promos: promoList,
       defaultPpnType: ppnType,
       ppnRate: ppn,
+      specialPriceConfig: spConfig,
     );
   }
 }
@@ -296,6 +373,7 @@ class ProductModel {
   final String? code;
   final String? barcode;
   final double price;
+  final double? specialPrice;
   double stock;
   final double qrStock;
   final String? unit;
@@ -314,6 +392,7 @@ class ProductModel {
     this.code,
     this.barcode,
     required this.price,
+    this.specialPrice,
     required this.stock,
     this.qrStock = 1.0,
     this.unit,
@@ -325,6 +404,8 @@ class ProductModel {
     this.wrapperQrcode,
     this.containedQrcodes = const [],
   });
+
+  bool get hasSpecialPrice => specialPrice != null && specialPrice! > 0;
 
   factory ProductModel.fromJson(Map<String, dynamic> json) {
     final parsedId = int.tryParse(
@@ -354,6 +435,12 @@ class ProductModel {
                 '0',
           ) ??
           0.0,
+      specialPrice: () {
+        final raw = json['special_price'];
+        if (raw == null) return null;
+        final val = double.tryParse(raw.toString());
+        return (val != null && val > 0) ? val : null;
+      }(),
       qrStock: double.tryParse(json['remaining_qty']?.toString() ?? '1') ?? 1.0,
       stock: double.tryParse(
             json['total_stock']?.toString() ??
@@ -400,6 +487,7 @@ class ProductModel {
         'code': code,
         'barcode': barcode,
         'price': price,
+        'special_price': specialPrice,
         'stock': stock,
         'remaining_qty': qrStock,
         'unit': unit,
@@ -418,6 +506,7 @@ class CartItemModel {
   int qty;
   double price;
   double discount;
+  final bool isSpecialPrice;
   final List<String> qrcodes;
   final List<String> wrapperQrcodes;
 
@@ -426,6 +515,7 @@ class CartItemModel {
     this.qty = 1,
     required this.price,
     this.discount = 0,
+    this.isSpecialPrice = false,
     String qrcode = '',
     List<String>? qrcodes,
     List<String>? wrapperQrcodes,
@@ -626,6 +716,7 @@ class InvoiceModel {
   final String? voidByName;
   final String? cashierName;
   final List<InvoiceItemModel> items;
+  final SpecialPriceConfigModel? specialPriceConfig;
 
   bool get isVoid => status == 0;
 
@@ -649,6 +740,7 @@ class InvoiceModel {
     this.voidAt,
     this.voidByName,
     this.items = const [],
+    this.specialPriceConfig,
   });
 
   InvoiceModel copyWith({
@@ -671,6 +763,7 @@ class InvoiceModel {
     String? voidAt,
     String? voidByName,
     List<InvoiceItemModel>? items,
+    SpecialPriceConfigModel? specialPriceConfig,
   }) {
     return InvoiceModel(
       id: id ?? this.id,
@@ -692,6 +785,7 @@ class InvoiceModel {
       voidAt: voidAt ?? this.voidAt,
       voidByName: voidByName ?? this.voidByName,
       items: items ?? this.items,
+      specialPriceConfig: specialPriceConfig ?? this.specialPriceConfig,
     );
   }
 
@@ -854,6 +948,12 @@ class InvoiceModel {
       voidAt: json['void_date']?.toString() ?? json['void_at']?.toString(),
       voidByName: parsedVoidByName,
       items: itemList,
+      specialPriceConfig: json['special_price_config'] != null &&
+              json['special_price_config'] is Map
+          ? SpecialPriceConfigModel.fromJson(
+              Map<String, dynamic>.from(json['special_price_config'] as Map),
+            )
+          : null,
     );
   }
 }

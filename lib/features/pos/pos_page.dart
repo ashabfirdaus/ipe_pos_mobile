@@ -35,6 +35,7 @@ class _PosPageState extends State<PosPage> {
   List<PaymentMethodModel> _paymentMethods = [];
   List<PromoModel> _promos = [];
   double _ppnRate = 0.0;
+  SpecialPriceConfigModel? _specialPriceConfig;
 
   final List<CartItemModel> _cartItems = [];
   late int _selectedPaymentMethodId;
@@ -52,10 +53,15 @@ class _PosPageState extends State<PosPage> {
     super.dispose();
   }
 
-  Future<void> _loadInitialMasterData() async {
-    setState(() => _isLoadingInitial = true);
+  Future<void> _loadInitialMasterData({bool showLoading = true}) async {
+    if (showLoading) {
+      setState(() => _isLoadingInitial = true);
+    }
 
-    final initialRes = await ApiService.getPosInitialData();
+    final initialRes = await ApiService.getPosInitialData(
+      branchId: _selectedBranchId,
+      warehouseId: _selectedWarehouseId,
+    );
 
     if (!mounted) return;
 
@@ -97,6 +103,7 @@ class _PosPageState extends State<PosPage> {
       _selectedPaymentMethodId = _paymentMethods.first.id;
       _promos = initData.promos;
       _ppnRate = initData.ppnRate;
+      _specialPriceConfig = initData.specialPriceConfig;
     } else {
       _paymentMethods = [
         PaymentMethodModel(id: 2, name: 'QRIS'),
@@ -105,7 +112,66 @@ class _PosPageState extends State<PosPage> {
       _selectedPaymentMethodId = 2;
     }
 
-    setState(() => _isLoadingInitial = false);
+    if (mounted) {
+      setState(() => _isLoadingInitial = false);
+    }
+  }
+
+  /// Memperbarui sisa kuota harga khusus secara real-time dari server
+  Future<void> _refreshSpecialPriceConfig() async {
+    try {
+      final initialRes = await ApiService.getPosInitialData(
+        branchId: _selectedBranchId,
+        warehouseId: _selectedWarehouseId,
+      );
+      if (initialRes.isSuccess &&
+          initialRes.data?.specialPriceConfig != null &&
+          mounted) {
+        setState(() {
+          _specialPriceConfig = initialRes.data!.specialPriceConfig;
+        });
+      }
+    } catch (_) {}
+  }
+
+  bool get _isSpecialPriceActive {
+    if (_specialPriceConfig == null || !_specialPriceConfig!.enabled) {
+      return false;
+    }
+    final now = DateTime.now();
+    try {
+      final startParts = _specialPriceConfig!.startTime.split(':');
+      final startHour = int.parse(startParts[0]);
+      final startMinute = startParts.length > 1 ? int.parse(startParts[1]) : 0;
+      if (now.hour < startHour ||
+          (now.hour == startHour && now.minute < startMinute)) {
+        return false;
+      }
+
+      final endParts = _specialPriceConfig!.endTime.split(':');
+      final endHour = int.parse(endParts[0]);
+      final endMinute = endParts.length > 1 ? int.parse(endParts[1]) : 59;
+      if (now.hour > endHour ||
+          (now.hour == endHour && now.minute > endMinute)) {
+        return false;
+      }
+    } catch (_) {
+      if (now.hour < 18) return false;
+    }
+    return true;
+  }
+
+  int get _usedSpecialQuotaInCart {
+    return _cartItems
+        .where((item) => item.isSpecialPrice)
+        .fold(0, (sum, item) => sum + item.qty);
+  }
+
+  int get _availableSpecialQuota {
+    if (_specialPriceConfig == null) return 0;
+    final baseRemaining = _specialPriceConfig!.remainingQuotaToday;
+    return (baseRemaining - _usedSpecialQuotaInCart)
+        .clamp(0, _specialPriceConfig!.dailyQuota);
   }
 
   double _calculateSubTotal() {
@@ -277,6 +343,19 @@ class _PosPageState extends State<PosPage> {
   Future<void> _incrementItem(int index) async {
     final item = _cartItems[index];
 
+    // Jika item harga khusus dan kuota sudah habis, alihkan ke harga normal
+    if (item.isSpecialPrice && _availableSpecialQuota <= 0) {
+      _showNotification(
+        'Batas kuota harga khusus hari ini telah tercapai (${_specialPriceConfig?.dailyQuota ?? 140} pcs). Item dialihkan ke harga normal.',
+        backgroundColor: AppColors.warning,
+        duration: const Duration(seconds: 3),
+      );
+      if (!item.activeCodes.isNotEmpty && !item.isKardus) {
+        _addToCart(item.product, qty: 1, forceNormalPrice: true);
+        return;
+      }
+    }
+
     // Jika barang menggunakan QR fisik (Satuan ber-QR atau Kardus)
     if (item.activeCodes.isNotEmpty || item.isKardus) {
       if (item.qty >= item.product.stock) {
@@ -352,6 +431,18 @@ class _PosPageState extends State<PosPage> {
           return;
         }
 
+        // Jika item ini adalah baris harga khusus tapi kuota habis, masukkan QR ke baris harga normal
+        if (item.isSpecialPrice && _availableSpecialQuota <= 0) {
+          _showNotification(
+            'Batas kuota harga khusus hari ini telah tercapai (${_specialPriceConfig?.dailyQuota ?? 140} pcs). Item dialihkan ke harga normal.',
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 3),
+          );
+          _addToCart(product,
+              qrcode: actualQrCode, qty: 1, forceNormalPrice: true);
+          return;
+        }
+
         setState(() {
           if (!item.activeCodes.contains(actualQrCode)) {
             item.activeCodes.add(actualQrCode);
@@ -384,6 +475,16 @@ class _PosPageState extends State<PosPage> {
       }
     } else {
       // Produk manual tanpa QR (ditambahkan dari katalog)
+      if (item.isSpecialPrice && _availableSpecialQuota <= 0) {
+        _showNotification(
+          'Batas kuota harga khusus hari ini telah tercapai (${_specialPriceConfig?.dailyQuota ?? 140} pcs). Qty tambahan menggunakan harga normal.',
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 3),
+        );
+        _addToCart(item.product, qty: 1, forceNormalPrice: true);
+        return;
+      }
+
       if (item.qty >= item.product.stock) {
         _showNotification(
           'Batas stok tercapai: maks ${item.product.stock.toInt()} item',
@@ -398,7 +499,12 @@ class _PosPageState extends State<PosPage> {
     }
   }
 
-  void _addToCart(ProductModel product, {String qrcode = '', int qty = 1}) {
+  void _addToCart(
+    ProductModel product, {
+    String qrcode = '',
+    int qty = 1,
+    bool forceNormalPrice = false,
+  }) {
     if (product.stock <= 0) {
       _showNotification(
         'Stok produk sedang kosong!',
@@ -411,31 +517,79 @@ class _PosPageState extends State<PosPage> {
         ? qrcode
         : (product.qrcode?.isNotEmpty == true ? product.qrcode! : '');
 
+    final bool canUsePromo =
+        !forceNormalPrice && product.hasSpecialPrice && _isSpecialPriceActive;
+
+    if (canUsePromo) {
+      final availableQuota = _availableSpecialQuota;
+      if (availableQuota <= 0) {
+        _showNotification(
+          'Kuota promo sore hari ini (${_specialPriceConfig?.dailyQuota ?? 140} pcs) telah habis. Menggunakan harga normal master.',
+          backgroundColor: AppColors.warning,
+          duration: const Duration(seconds: 3),
+        );
+        _insertToCartItem(product,
+            qrcode: effectiveQrcode, qty: qty, isSpecialPrice: false);
+      } else if (availableQuota >= qty) {
+        _insertToCartItem(product,
+            qrcode: effectiveQrcode, qty: qty, isSpecialPrice: true);
+      } else {
+        // Kasus SPLIT LINE ITEMS: Kuota tersisa < Qty pembelian!
+        final promoQty = availableQuota;
+        final normalQty = qty - promoQty;
+        _insertToCartItem(product,
+            qrcode: effectiveQrcode, qty: promoQty, isSpecialPrice: true);
+        _insertToCartItem(product,
+            qrcode: '', qty: normalQty, isSpecialPrice: false);
+        _showNotification(
+          'Pecah baris harga: $promoQty pcs Harga Khusus (${CurrencyFormatter.format(product.specialPrice!)}) & $normalQty pcs Normal (${CurrencyFormatter.format(product.price)})',
+          duration: const Duration(seconds: 4),
+        );
+      }
+    } else {
+      _insertToCartItem(product,
+          qrcode: effectiveQrcode, qty: qty, isSpecialPrice: false);
+    }
+
+    _onCartChanged();
+    _showNotification('${product.name} berhasil ditambahkan');
+  }
+
+  void _insertToCartItem(
+    ProductModel product, {
+    String qrcode = '',
+    int qty = 1,
+    required bool isSpecialPrice,
+  }) {
+    final double itemPrice =
+        isSpecialPrice ? product.specialPrice! : product.price;
+
     // 1. Jika ditambahkan dengan QR Code stok fisik
-    if (effectiveQrcode.isNotEmpty) {
+    if (qrcode.isNotEmpty) {
       final isQrDuplicate = _cartItems.any(
-        (item) => item.activeCodes.contains(effectiveQrcode),
+        (item) => item.activeCodes.contains(qrcode),
       );
       if (isQrDuplicate) {
         _showNotification(
-          'QR Code stok "$effectiveQrcode" sudah ada di dalam keranjang!',
+          'QR Code stok "$qrcode" sudah ada di dalam keranjang!',
           backgroundColor: AppColors.warning,
         );
         return;
       }
 
-      // Cek apakah produk dengan tipe yang SAMA (Kardus dengan Kardus, Satuan dengan Satuan) sudah ada
+      // Cek apakah produk dengan tipe yang SAMA (Kardus vs Satuan) dan harga yang sama (isSpecialPrice) sudah ada
       final existingIndex = _cartItems.indexWhere(
         (item) =>
             item.product.itemId == product.itemId &&
-            item.isKardus == product.isKardus,
+            item.isKardus == product.isKardus &&
+            item.isSpecialPrice == isSpecialPrice,
       );
 
       if (existingIndex >= 0) {
         final existingItem = _cartItems[existingIndex];
         setState(() {
-          if (!existingItem.activeCodes.contains(effectiveQrcode)) {
-            existingItem.activeCodes.add(effectiveQrcode);
+          if (!existingItem.activeCodes.contains(qrcode)) {
+            existingItem.activeCodes.add(qrcode);
           }
           existingItem.qty += qty;
           if (existingItem.qty > existingItem.product.stock) {
@@ -448,9 +602,10 @@ class _PosPageState extends State<PosPage> {
             CartItemModel(
               product: product,
               qty: qty,
-              price: product.price,
-              qrcodes: product.isKardus ? [] : [effectiveQrcode],
-              wrapperQrcodes: product.isKardus ? [effectiveQrcode] : [],
+              price: itemPrice,
+              isSpecialPrice: isSpecialPrice,
+              qrcodes: product.isKardus ? [] : [qrcode],
+              wrapperQrcodes: product.isKardus ? [qrcode] : [],
             ),
           );
         });
@@ -458,7 +613,10 @@ class _PosPageState extends State<PosPage> {
     } else {
       // 2. Jika ditambahkan manual dari katalog
       final existingIndex = _cartItems.indexWhere(
-        (item) => item.product.itemId == product.itemId && !item.isKardus,
+        (item) =>
+            item.product.itemId == product.itemId &&
+            !item.isKardus &&
+            item.isSpecialPrice == isSpecialPrice,
       );
 
       if (existingIndex >= 0) {
@@ -480,7 +638,8 @@ class _PosPageState extends State<PosPage> {
             CartItemModel(
               product: product,
               qty: qty,
-              price: product.price,
+              price: itemPrice,
+              isSpecialPrice: isSpecialPrice,
               qrcodes: [],
               wrapperQrcodes: [],
             ),
@@ -488,10 +647,6 @@ class _PosPageState extends State<PosPage> {
         });
       }
     }
-
-    _onCartChanged();
-
-    _showNotification('${product.name} berhasil ditambahkan');
   }
 
   void _clearCart() async {
@@ -604,19 +759,272 @@ class _PosPageState extends State<PosPage> {
   }
 
 
+  Future<bool> _showPaymentConfirmationDialog({
+    required double grandTotal,
+    required double subTotal,
+    required double discount,
+    required double ppn,
+    required int totalQty,
+    required String paymentMethodName,
+  }) async {
+    final specialPriceItemsCount = _cartItems
+        .where((item) => item.isSpecialPrice)
+        .fold(0, (sum, item) => sum + item.qty);
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.payments_rounded,
+                color: AppColors.primary,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Konfirmasi Pembayaran',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Periksa kembali rincian transaksi',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Kartu Ringkasan Pembayaran
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  children: [
+                    _buildConfirmRow(
+                      'Metode Pembayaran',
+                      paymentMethodName,
+                      isBadge: true,
+                    ),
+                    const SizedBox(height: 8),
+                    _buildConfirmRow(
+                      'Total Barang',
+                      '$totalQty pcs (${_cartItems.length} baris item)',
+                    ),
+                    const SizedBox(height: 8),
+                    _buildConfirmRow(
+                      'Sub Total',
+                      CurrencyFormatter.format(subTotal),
+                    ),
+                    if (discount > 0) ...[
+                      const SizedBox(height: 8),
+                      _buildConfirmRow(
+                        'Diskon Promo',
+                        '- ${CurrencyFormatter.format(discount)}',
+                        valueColor: AppColors.success,
+                        isBold: true,
+                      ),
+                    ],
+                    if (ppn > 0) ...[
+                      const SizedBox(height: 8),
+                      _buildConfirmRow(
+                        'PPN ($_ppnRate%)',
+                        '+ ${CurrencyFormatter.format(ppn)}',
+                      ),
+                    ],
+                    if (specialPriceItemsCount > 0) ...[
+                      const SizedBox(height: 8),
+                      _buildConfirmRow(
+                        'Promo Sore Terpakai',
+                        '$specialPriceItemsCount pcs Harga Khusus',
+                        valueColor: Colors.green.shade800,
+                        isBold: true,
+                      ),
+                    ],
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 10),
+                      child: Divider(height: 1),
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'Total Pembayaran',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(grandTotal),
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.shade300),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: Colors.amber.shade900,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Pastikan pembayaran/bukti transfer pelanggan telah diterima sebelum menyelesaikan transaksi.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.amber.shade900,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Periksa Kembali'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            icon: const Icon(Icons.check_circle_rounded, size: 18),
+            label: const Text(
+              'Selesaikan Bayar',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return result ?? false;
+  }
+
+  Widget _buildConfirmRow(
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isBold = false,
+    bool isBadge = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary,
+          ),
+        ),
+        if (isBadge)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+          )
+        else
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
+              color: valueColor ?? AppColors.textPrimary,
+            ),
+          ),
+      ],
+    );
+  }
+
   Future<void> _handleCheckout() async {
-    // Jaminan ketat: item Satuan ber-QR hanya boleh dijual sebanyak QR yang berhasil di-scan
-    // Item Kardus tidak dipotong menjadi activeCodes.length karena 1 wrapper QR mewakili seluruh isi kemasan/kardus
-    for (final item in _cartItems) {
-      if (!item.isKardus &&
-          item.activeCodes.isNotEmpty &&
-          item.qty > item.activeCodes.length) {
-        item.qty = item.activeCodes.length;
-      }
-    }
-
-    final grandTotal = _calculateGrandTotal();
-
+    // 1. Validasi keranjang belanja
     if (_cartItems.isEmpty) {
       _showNotification(
         'Keranjang belanja masih kosong! Silakan pilih produk atau scan QR stok.',
@@ -641,6 +1049,45 @@ class _PosPageState extends State<PosPage> {
       return;
     }
 
+    // Jaminan ketat: item Satuan ber-QR hanya boleh dijual sebanyak QR yang berhasil di-scan
+    // Item Kardus tidak dipotong menjadi activeCodes.length karena 1 wrapper QR mewakili seluruh isi kemasan/kardus
+    for (final item in _cartItems) {
+      if (!item.isKardus &&
+          item.activeCodes.isNotEmpty &&
+          item.qty > item.activeCodes.length) {
+        item.qty = item.activeCodes.length;
+      }
+    }
+
+    final grandTotal = _calculateGrandTotal();
+    final subTotal = _calculateSubTotal();
+    final discount = _calculateDiscount();
+    final ppn = _calculatePpn();
+    final totalQty = _cartItems.fold(0, (sum, item) => sum + item.qty);
+
+    PaymentMethodModel? selectedMethod;
+    try {
+      selectedMethod = _paymentMethods.firstWhere(
+        (pm) => pm.id == _selectedPaymentMethodId,
+      );
+    } catch (_) {
+      selectedMethod = null;
+    }
+    final paymentMethodName = selectedMethod?.name ?? 'Pembayaran Non-Tunai';
+
+    // 2. Tampilkan dialog validasi / konfirmasi sebelum menyelesaikan transaksi
+    final isConfirmed = await _showPaymentConfirmationDialog(
+      grandTotal: grandTotal,
+      subTotal: subTotal,
+      discount: discount,
+      ppn: ppn,
+      totalQty: totalQty,
+      paymentMethodName: paymentMethodName,
+    );
+
+    if (!isConfirmed || !mounted) return;
+
+    // 3. Eksekusi proses pembayaran ke API
     setState(() => _isProcessingCheckout = true);
 
     final itemsPayload =
@@ -731,17 +1178,54 @@ class _PosPageState extends State<PosPage> {
         invoice = invoice.copyWith(change: 0.0);
       }
 
+      // Update sisa kuota harga khusus secara real-time dari respons server
       setState(() {
+        if (invoice.specialPriceConfig != null) {
+          _specialPriceConfig = invoice.specialPriceConfig;
+        } else {
+          final int soldSpecialQty = cartItemsBackup
+              .where((it) => it.isSpecialPrice)
+              .fold<int>(0, (sum, it) => sum + it.qty);
+          if (soldSpecialQty > 0 && _specialPriceConfig != null) {
+            final int newUsed =
+                _specialPriceConfig!.usedQuotaToday + soldSpecialQty;
+            final int newRemaining = (_specialPriceConfig!.dailyQuota - newUsed)
+                .clamp(0, _specialPriceConfig!.dailyQuota)
+                .toInt();
+            _specialPriceConfig = SpecialPriceConfigModel(
+              enabled: _specialPriceConfig!.enabled,
+              isCurrentlyActive: _specialPriceConfig!.isCurrentlyActive,
+              isTimeActive: _specialPriceConfig!.isTimeActive,
+              isDayActive: _specialPriceConfig!.isDayActive,
+              startTime: _specialPriceConfig!.startTime,
+              endTime: _specialPriceConfig!.endTime,
+              dailyQuota: _specialPriceConfig!.dailyQuota,
+              scope: _specialPriceConfig!.scope,
+              usedQuotaToday: newUsed,
+              remainingQuotaToday: newRemaining,
+              isQuotaAvailable: newRemaining > 0,
+            );
+          }
+        }
+
         _cartItems.clear();
         _selectedPromo = null;
       });
 
+      // Sinkronkan sisa kuota terbaru dari backend di background
+      _refreshSpecialPriceConfig();
+
       // Tampilkan struk nota dialog dengan opsi cetak ke printer Bluetooth
-      showDialog(
+      await showDialog(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => ReceiptDialog(invoice: invoice),
       );
+
+      // Setelah dialog struk ditutup, otomatis muat ulang data master terkini
+      if (mounted) {
+        await _loadInitialMasterData(showLoading: false);
+      }
     } else {
       final isConnectionIssue = res.statusCode == 503 ||
           res.statusCode == 408 ||
@@ -811,6 +1295,29 @@ class _PosPageState extends State<PosPage> {
           );
 
           setState(() {
+            final int soldSpecialQty = _cartItems
+                .where((it) => it.isSpecialPrice)
+                .fold<int>(0, (sum, it) => sum + it.qty);
+            if (soldSpecialQty > 0 && _specialPriceConfig != null) {
+              final int newUsed =
+                  _specialPriceConfig!.usedQuotaToday + soldSpecialQty;
+              final int newRemaining = (_specialPriceConfig!.dailyQuota - newUsed)
+                  .clamp(0, _specialPriceConfig!.dailyQuota)
+                  .toInt();
+              _specialPriceConfig = SpecialPriceConfigModel(
+                enabled: _specialPriceConfig!.enabled,
+                isCurrentlyActive: _specialPriceConfig!.isCurrentlyActive,
+                isTimeActive: _specialPriceConfig!.isTimeActive,
+                isDayActive: _specialPriceConfig!.isDayActive,
+                startTime: _specialPriceConfig!.startTime,
+                endTime: _specialPriceConfig!.endTime,
+                dailyQuota: _specialPriceConfig!.dailyQuota,
+                scope: _specialPriceConfig!.scope,
+                usedQuotaToday: newUsed,
+                remainingQuotaToday: newRemaining,
+                isQuotaAvailable: newRemaining > 0,
+              );
+            }
             _cartItems.clear();
             _selectedPromo = null;
           });
@@ -821,11 +1328,14 @@ class _PosPageState extends State<PosPage> {
           );
 
           if (mounted) {
-            showDialog(
+            await showDialog(
               context: context,
               barrierDismissible: false,
               builder: (ctx) => ReceiptDialog(invoice: offlineInvoice),
             );
+            if (mounted) {
+              await _loadInitialMasterData(showLoading: false);
+            }
           }
           return;
         }
@@ -881,11 +1391,14 @@ class _PosPageState extends State<PosPage> {
                     ),
                   ),
                   tooltip: '$pendingCount Transaksi Offline Belum Disinkronkan',
-                  onPressed: () {
-                    showDialog(
+                  onPressed: () async {
+                    await showDialog(
                       context: context,
                       builder: (ctx) => const OfflineSyncDialog(),
                     );
+                    if (mounted) {
+                      await _loadInitialMasterData(showLoading: false);
+                    }
                   },
                 ),
               );
@@ -925,6 +1438,9 @@ class _PosPageState extends State<PosPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // 0. Banner Promo Harga Khusus Sore
+                          _buildSpecialPricePromoBanner(),
+
                           // 1. Tombol Katalog Produk
                           _buildCatalogButton(totalItemsCount),
                           const SizedBox(height: 10),
@@ -1033,6 +1549,103 @@ class _PosPageState extends State<PosPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildSpecialPricePromoBanner() {
+    if (_specialPriceConfig == null || !_specialPriceConfig!.enabled) {
+      return const SizedBox.shrink();
+    }
+
+    final isTimeActive = _isSpecialPriceActive;
+    final remaining = _availableSpecialQuota;
+    final totalQuota = _specialPriceConfig!.dailyQuota;
+
+    if (isTimeActive) {
+      if (remaining > 0) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.green.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.bolt_rounded, color: Colors.green.shade700, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '⚡ Promo Sore Aktif • Sisa Kuota Khusus: $remaining / $totalQuota pcs',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      } else {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.orange.shade300),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: Colors.orange.shade800, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Promo Sore: Kuota Hari Ini Habis ($totalQuota pcs). Diterapkan Harga Normal.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange.shade900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } else {
+      final startTimeStr = _specialPriceConfig!.startTime.length >= 5
+          ? _specialPriceConfig!.startTime.substring(0, 5)
+          : _specialPriceConfig!.startTime;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.blue.shade50,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue.shade200),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.access_time_rounded,
+                color: Colors.blue.shade700, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Promo WeMeal Sore berlaku pk $startTimeStr WIB (Kuota: $totalQuota pcs gabungan)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue.shade900,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   Widget _buildCatalogButton(int totalItemsCount) {
@@ -1218,6 +1831,35 @@ class _PosPageState extends State<PosPage> {
             ],
           ),
           const SizedBox(height: 6),
+
+          // Badge Khusus Harga Sore
+          if (item.isSpecialPrice) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(color: Colors.green.shade300),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bolt_rounded,
+                      size: 14, color: Colors.green.shade700),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Harga Khusus Sore: ${CurrencyFormatter.format(item.price)}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           // 2. Badge Row: QR Kardus / Satuan / Pasangkan QR
           if (item.activeCodes.isNotEmpty) ...[

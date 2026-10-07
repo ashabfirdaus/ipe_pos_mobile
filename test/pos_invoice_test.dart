@@ -296,5 +296,54 @@ void main() {
 
       expect(await StorageService.hasValidToken(), isFalse);
     });
+
+    test('Special Price & Split Line Items Test (WeMeal 35000 vs Normal 50000)', () {
+      final product = ProductModel(
+        id: 313,
+        itemId: 313,
+        name: 'WEMEAL - OPOR AYAM (KOTAK)',
+        price: 50000,
+        specialPrice: 35000,
+        stock: 50,
+      );
+
+      expect(product.hasSpecialPrice, isTrue);
+      expect(product.specialPrice, 35000.0);
+      expect(product.price, 50000.0);
+
+      // Baris 1: Harga Khusus (10 pcs @ 35.000)
+      final specialCartItem = CartItemModel(
+        product: product,
+        qty: 10,
+        price: 35000,
+        isSpecialPrice: true,
+      );
+
+      // Baris 2: Harga Normal (5 pcs @ 50.000)
+      final normalCartItem = CartItemModel(
+        product: product,
+        qty: 5,
+        price: 50000,
+        isSpecialPrice: false,
+      );
+
+      expect(specialCartItem.subTotal, 350000.0);
+      expect(normalCartItem.subTotal, 250000.0);
+      expect(specialCartItem.subTotal + normalCartItem.subTotal, 600000.0);
+
+      final specialJson = specialCartItem.toInvoiceItemJson();
+      final normalJson = normalCartItem.toInvoiceItemJson();
+
+      expect(specialJson['item_id'], 313);
+      expect(specialJson['price'], 35000);
+      expect(specialJson['qty'], 10);
+      expect(specialJson['sub_total'], 350000);
+
+      expect(normalJson['item_id'], 313);
+      expect(normalJson['price'], 50000);
+      expect(normalJson['qty'], 5);
+      expect(normalJson['sub_total'], 250000);
+    });
   });
 }
+

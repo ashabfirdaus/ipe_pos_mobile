@@ -41,15 +41,25 @@ class _PosPageState extends State<PosPage> {
   late int _selectedPaymentMethodId;
   PromoModel? _selectedPromo;
 
+  final _scannerInputController = TextEditingController();
+  final _scannerFocusNode = FocusNode();
+
   @override
   void initState() {
     super.initState();
     _selectedPaymentMethodId = 1;
     _loadInitialMasterData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _scannerFocusNode.requestFocus();
+      }
+    });
   }
 
   @override
   void dispose() {
+    _scannerInputController.dispose();
+    _scannerFocusNode.dispose();
     super.dispose();
   }
 
@@ -239,19 +249,13 @@ class _PosPageState extends State<PosPage> {
     setState(() {});
   }
 
-  Future<void> _openDirectCameraScanner() async {
-    final scannedCode = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
-    );
-
-    // Jika scanner dibatalkan / ditutup tanpa mendapatkan QR code, jangan kirim request ke server
-    if (scannedCode == null ||
-        scannedCode.trim().isEmpty ||
-        scannedCode.trim().toLowerCase() == 'null') {
+  /// Memproses kode hasil scan barcode/QR (berlaku untuk kamera maupun perangkat scanner)
+  Future<void> _handleScannedCode(String rawCode) async {
+    final cleanCode = rawCode.trim();
+    if (cleanCode.isEmpty || cleanCode.toLowerCase() == 'null') {
       return;
     }
 
-    final cleanCode = scannedCode.trim();
     if (!mounted) return;
 
     // Cek apakah QR stok ini sudah ada di dalam keranjang
@@ -313,6 +317,27 @@ class _PosPageState extends State<PosPage> {
             : 'Stok barang dengan QR Kardus / Satuan "$cleanCode" tidak ditemukan.',
         backgroundColor: AppColors.error,
       );
+    }
+  }
+
+  Future<void> _openDirectCameraScanner() async {
+    final scannedCode = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
+    );
+
+    if (scannedCode != null) {
+      await _handleScannedCode(scannedCode);
+    }
+  }
+
+  Future<void> _handleScannerFieldSubmitted(String code) async {
+    final clean = code.trim();
+    if (clean.isEmpty) return;
+    _scannerInputController.clear();
+    await _handleScannedCode(clean);
+    // Kembalikan fokus kursor ke input scanner agar kasir dapat langsung scan barang berikutnya
+    if (mounted) {
+      _scannerFocusNode.requestFocus();
     }
   }
 
@@ -1525,7 +1550,7 @@ class _PosPageState extends State<PosPage> {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSizes.md,
-        vertical: 10,
+        vertical: 8,
       ),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -1539,57 +1564,100 @@ class _PosPageState extends State<PosPage> {
       ),
       child: Row(
         children: [
+          // Field input untuk perangkat scanner barcode / QR
           Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 11,
+            child: TextField(
+              controller: _scannerInputController,
+              focusNode: _scannerFocusNode,
+              textInputAction: TextInputAction.go,
+              textCapitalization: TextCapitalization.characters,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Scan via perangkat scanner di sini...',
+                hintStyle: TextStyle(
+                  fontSize: 12.5,
+                  color: Colors.grey.shade500,
                 ),
-                shape: RoundedRectangleBorder(
+                prefixIcon: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+                suffixIcon: _scannerInputController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear_rounded, size: 18),
+                        onPressed: () {
+                          _scannerInputController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                isDense: true,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 9,
+                ),
+                border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
                 ),
-                elevation: 1,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  borderSide: BorderSide(color: Colors.grey.shade300),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
+                  borderSide: const BorderSide(
+                    color: AppColors.primary,
+                    width: 1.5,
+                  ),
+                ),
               ),
-              onPressed: _openDirectCameraScanner,
-              icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
-              label: const Text(
-                'Scan QR Barang',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                overflow: TextOverflow.ellipsis,
-              ),
+              onSubmitted: _handleScannerFieldSubmitted,
             ),
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFE8EAF6),
-                foregroundColor: const Color(0xFF1A237E),
-                elevation: 0,
-                side: const BorderSide(color: Color(0xFFC5CAE9)),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 11,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(AppSizes.radiusMd),
-                ),
+          // Tombol Scan Kamera
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 10,
               ),
-              onPressed: _openScanQrDialog,
-              icon: const Icon(
-                Icons.keyboard_alt_outlined,
-                size: 18,
-                color: Color(0xFF1A237E),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               ),
-              label: const Text(
-                'Input Kode Manual',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
+              elevation: 1,
+            ),
+            onPressed: _openDirectCameraScanner,
+            icon: const Icon(Icons.camera_alt_rounded, size: 18),
+            label: const Text(
+              'Kamera',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 6),
+          // Tombol Input Kode Manual / Cari
+          IconButton.filled(
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFE8EAF6),
+              foregroundColor: const Color(0xFF1A237E),
+              padding: const EdgeInsets.all(9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusMd),
               ),
             ),
+            icon: const Icon(
+              Icons.keyboard_alt_outlined,
+              size: 20,
+              color: Color(0xFF1A237E),
+            ),
+            tooltip: 'Input Kode Manual / Cari',
+            onPressed: _openScanQrDialog,
           ),
         ],
       ),

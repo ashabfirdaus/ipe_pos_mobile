@@ -366,6 +366,30 @@ class _PosPageState extends State<PosPage> {
         return;
       }
 
+      // Jika produk Satuan dan QR yang aktif memiliki sisa stok yang cukup,
+      // kasir bisa langsung menambah Qty dari QR yang sama tanpa perlu scan kamera ulang.
+      if (!item.isKardus && item.activeCodes.toSet().length == 1) {
+        final currentQr = item.activeCodes.first;
+        final currentQrCount =
+            item.qrcodes.where((c) => c == currentQr).length;
+        final maxStockForQr =
+            item.product.qrStock > 0 ? item.product.qrStock.toInt() : 1;
+        if (currentQrCount < maxStockForQr) {
+          setState(() {
+            item.qrcodes.add(currentQr);
+            item.qty++;
+            if (item.qty > item.product.stock) {
+              item.product.stock = item.qty.toDouble();
+            }
+          });
+          _onCartChanged();
+          _showNotification(
+            '${item.product.name} (QR: $currentQr) ditambah (Qty: ${item.qty})',
+          );
+          return;
+        }
+      }
+
       final scannedCode = await Navigator.of(context).push<String>(
         MaterialPageRoute(builder: (ctx) => const CameraScannerPage()),
       );
@@ -380,16 +404,33 @@ class _PosPageState extends State<PosPage> {
       final cleanCode = scannedCode.trim();
       if (!mounted) return;
 
-      // Cek apakah QR sudah ada di dalam keranjang
-      final isDuplicate = _cartItems.any(
-        (it) => it.activeCodes.contains(cleanCode),
-      );
-      if (isDuplicate) {
+      // Cek apakah QR sudah ada di dalam keranjang baris lain
+      final isDuplicateOtherRow = _cartItems.asMap().entries.any(
+            (entry) =>
+                entry.key != index &&
+                entry.value.activeCodes.contains(cleanCode),
+          );
+      if (isDuplicateOtherRow) {
         _showNotification(
-          'QR Code stok "$cleanCode" sudah ada di dalam keranjang!',
+          'QR Code stok "$cleanCode" sudah ada di baris keranjang lain!',
           backgroundColor: AppColors.warning,
         );
         return;
+      }
+
+      // Jika scan QR yang sama pada baris ini tapi stok QR sudah maksimal
+      if (!item.isKardus && item.activeCodes.contains(cleanCode)) {
+        final maxStock =
+            item.product.qrStock > 0 ? item.product.qrStock.toInt() : 1;
+        final currentCount =
+            item.qrcodes.where((c) => c == cleanCode).length;
+        if (currentCount >= maxStock) {
+          _showNotification(
+            'Batas stok pada QR "$cleanCode" sudah maksimal ($maxStock item)!',
+            backgroundColor: AppColors.warning,
+          );
+          return;
+        }
       }
 
       _showNotification(
@@ -444,17 +485,17 @@ class _PosPageState extends State<PosPage> {
         }
 
         setState(() {
-          if (!item.activeCodes.contains(actualQrCode)) {
-            item.activeCodes.add(actualQrCode);
-            if (item.isKardus) {
+          if (item.isKardus) {
+            if (!item.activeCodes.contains(actualQrCode)) {
+              item.activeCodes.add(actualQrCode);
               item.wrapperQrcodes.add(actualQrCode);
-              final addQty =
-                  product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
-              item.qty += addQty;
-            } else {
-              item.qrcodes.add(actualQrCode);
-              item.qty = item.activeCodes.length;
             }
+            final addQty =
+                product.qrStock.toInt() > 0 ? product.qrStock.toInt() : 1;
+            item.qty += addQty;
+          } else {
+            item.qrcodes.add(actualQrCode);
+            item.qty = item.qrcodes.length;
           }
           if (item.qty > item.product.stock) {
             item.product.stock = item.qty.toDouble();
@@ -588,8 +629,12 @@ class _PosPageState extends State<PosPage> {
       if (existingIndex >= 0) {
         final existingItem = _cartItems[existingIndex];
         setState(() {
-          if (!existingItem.activeCodes.contains(qrcode)) {
-            existingItem.activeCodes.add(qrcode);
+          if (product.isKardus) {
+            if (!existingItem.wrapperQrcodes.contains(qrcode)) {
+              existingItem.wrapperQrcodes.add(qrcode);
+            }
+          } else {
+            existingItem.qrcodes.addAll(List.filled(qty, qrcode));
           }
           existingItem.qty += qty;
           if (existingItem.qty > existingItem.product.stock) {
@@ -604,7 +649,7 @@ class _PosPageState extends State<PosPage> {
               qty: qty,
               price: itemPrice,
               isSpecialPrice: isSpecialPrice,
-              qrcodes: product.isKardus ? [] : [qrcode],
+              qrcodes: product.isKardus ? [] : List.filled(qty, qrcode),
               wrapperQrcodes: product.isKardus ? [qrcode] : [],
             ),
           );
@@ -1868,7 +1913,9 @@ class _PosPageState extends State<PosPage> {
               runSpacing: 4,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                ...item.activeCodes.map((qr) {
+                ...item.activeCodes.toSet().map((qr) {
+                  final qrCount =
+                      item.activeCodes.where((c) => c == qr).length;
                   return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 7,
@@ -1899,7 +1946,11 @@ class _PosPageState extends State<PosPage> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          item.isKardus ? 'Kardus: $qr' : 'Satuan: $qr',
+                          item.isKardus
+                              ? 'Kardus: $qr'
+                              : (qrCount > 1
+                                  ? 'Satuan: $qr ($qrCount pcs)'
+                                  : 'Satuan: $qr'),
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -1913,11 +1964,11 @@ class _PosPageState extends State<PosPage> {
                         InkWell(
                           onTap: () {
                             setState(() {
-                              item.activeCodes.remove(qr);
+                              item.activeCodes.removeWhere((c) => c == qr);
                               if (item.isKardus) {
-                                item.wrapperQrcodes.remove(qr);
+                                item.wrapperQrcodes.removeWhere((c) => c == qr);
                               } else {
-                                item.qrcodes.remove(qr);
+                                item.qrcodes.removeWhere((c) => c == qr);
                               }
                               if (item.activeCodes.isEmpty) {
                                 _cartItems.removeAt(index);

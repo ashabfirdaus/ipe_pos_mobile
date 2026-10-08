@@ -520,8 +520,12 @@ class CartItemModel {
     List<String>? qrcodes,
     List<String>? wrapperQrcodes,
   })  : qrcodes = qrcodes != null
-            ? List<String>.from(qrcodes)
-            : (!product.isKardus && qrcode.isNotEmpty ? [qrcode] : <String>[]),
+            ? (qrcodes.length == 1 && qty > 1 && !product.isKardus
+                ? List.filled(qty, qrcodes.first)
+                : List<String>.from(qrcodes))
+            : (!product.isKardus && qrcode.isNotEmpty
+                ? List.filled(qty, qrcode)
+                : <String>[]),
         wrapperQrcodes = wrapperQrcodes != null
             ? List<String>.from(wrapperQrcodes)
             : (product.isKardus
@@ -561,8 +565,9 @@ class CartItemModel {
               : (product.qrcode != null && product.qrcode!.isNotEmpty
                   ? [product.qrcode!]
                   : <String>[]));
+      final uniqueWrapperQrs = finalWrapperQrs.toSet().toList();
       final joinedWrapperQr =
-          finalWrapperQrs.isNotEmpty ? finalWrapperQrs.join(', ') : null;
+          uniqueWrapperQrs.isNotEmpty ? uniqueWrapperQrs.join(', ') : null;
 
       return {
         'item_id': product.itemId,
@@ -574,7 +579,7 @@ class CartItemModel {
         'is_kardus': true,
         'qrcode': null, // Tidak termasuk di qrcode ketika yang discan kardus
         'wrapper_qrcode': joinedWrapperQr,
-        'wrapper_qrcodes': finalWrapperQrs,
+        'wrapper_qrcodes': uniqueWrapperQrs,
         'contained_qrcodes': product.containedQrcodes,
         if (product.unit != null) 'unit': product.unit,
         if (product.code != null) 'code': product.code,
@@ -585,7 +590,8 @@ class CartItemModel {
           : (product.qrcode != null && product.qrcode!.isNotEmpty
               ? [product.qrcode!]
               : <String>[]);
-      final joinedQr = finalQrs.isNotEmpty ? finalQrs.join(', ') : null;
+      final uniqueQrs = finalQrs.toSet().toList();
+      final joinedQr = uniqueQrs.isNotEmpty ? uniqueQrs.join(', ') : null;
 
       return {
         'item_id': product.itemId,
@@ -596,7 +602,7 @@ class CartItemModel {
         'sub_total': subTotal,
         'is_kardus': false,
         'qrcode': joinedQr,
-        'qrcodes': finalQrs,
+        'qrcodes': uniqueQrs,
         'wrapper_qrcode': null,
         if (product.unit != null) 'unit': product.unit,
         if (product.code != null) 'code': product.code,

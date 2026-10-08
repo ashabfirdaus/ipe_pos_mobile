@@ -2,7 +2,7 @@ class ApiConfig {
   ApiConfig._();
 
   // Single source of truth for Base API URL
-  static const String baseUrl = 'http://192.168.110.154:8080/api';
+  static const String baseUrl = 'http://192.168.1.4:8080/api';
   static const String defaultBaseUrl = baseUrl;
 
   // Connection Timeouts

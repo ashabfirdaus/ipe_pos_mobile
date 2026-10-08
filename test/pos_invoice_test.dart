@@ -344,6 +344,51 @@ void main() {
       expect(normalJson['qty'], 5);
       expect(normalJson['sub_total'], 250000);
     });
+
+    test('CartItemModel with multi-qty on single QR code assigns all qty to that QR code', () {
+      final product = ProductModel(
+        id: 317,
+        itemId: 317,
+        name: 'WEMEAL - TUNA BALADO (KOTAK)',
+        price: 50000,
+        stock: 10,
+        qrStock: 5,
+        unit: 'Pcs',
+        qrcode: '2608104652',
+      );
+
+      // Kasus 1: Dibuat dengan qrcode dan qty = 3 (misal dari StockQtyConfirmDialog)
+      final cartItem1 = CartItemModel(
+        product: product,
+        qty: 3,
+        price: 50000,
+        qrcode: '2608104652',
+      );
+
+      expect(cartItem1.qty, 3);
+      expect(cartItem1.qrcodes.length, 3);
+      expect(cartItem1.qrcodes.every((c) => c == '2608104652'), isTrue);
+      expect(cartItem1.activeCodes.length, 3);
+      expect(cartItem1.activeCodes.toSet().length, 1);
+
+      // JSON toInvoiceItemJson harus tetap bersih dan tidak duplikat
+      final json1 = cartItem1.toInvoiceItemJson();
+      expect(json1['qty'], 3);
+      expect(json1['qrcode'], '2608104652');
+      expect(json1['qrcodes'], ['2608104652']);
+
+      // Kasus 2: Dibuat dengan qrcodes berisi 1 QR dan qty = 3
+      final cartItem2 = CartItemModel(
+        product: product,
+        qty: 3,
+        price: 50000,
+        qrcodes: ['2608104652'],
+      );
+
+      expect(cartItem2.qty, 3);
+      expect(cartItem2.qrcodes.length, 3);
+      expect(cartItem2.qrcodes.every((c) => c == '2608104652'), isTrue);
+    });
   });
 }
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_sizes.dart';
 import '../../core/constants/app_text_styles.dart';
+import '../../core/models/api_response.dart';
 import '../../core/models/pos_models.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/api_service.dart';
@@ -148,27 +149,20 @@ class _PosPageState extends State<PosPage> {
     if (_specialPriceConfig == null || !_specialPriceConfig!.enabled) {
       return false;
     }
+    if (!_specialPriceConfig!.isDayActive) {
+      return false;
+    }
     final now = DateTime.now();
     try {
-      final startParts = _specialPriceConfig!.startTime.split(':');
-      final startHour = int.parse(startParts[0]);
-      final startMinute = startParts.length > 1 ? int.parse(startParts[1]) : 0;
-      if (now.hour < startHour ||
-          (now.hour == startHour && now.minute < startMinute)) {
-        return false;
-      }
-
-      final endParts = _specialPriceConfig!.endTime.split(':');
-      final endHour = int.parse(endParts[0]);
-      final endMinute = endParts.length > 1 ? int.parse(endParts[1]) : 59;
-      if (now.hour > endHour ||
-          (now.hour == endHour && now.minute > endMinute)) {
-        return false;
-      }
+      final nowTimeStr =
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+      final isLocalTimeInRange =
+          nowTimeStr.compareTo(_specialPriceConfig!.startTime) >= 0 &&
+              nowTimeStr.compareTo(_specialPriceConfig!.endTime) <= 0;
+      return _specialPriceConfig!.isCurrentlyActive || isLocalTimeInRange;
     } catch (_) {
-      if (now.hour < 18) return false;
+      return _specialPriceConfig!.isCurrentlyActive || now.hour >= 18;
     }
-    return true;
   }
 
   int get _usedSpecialQuotaInCart {
@@ -303,6 +297,9 @@ class _PosPageState extends State<PosPage> {
           context,
           product: product,
           qrcode: actualQrCode,
+          isSpecialPrice: product.hasSpecialPrice &&
+              _isSpecialPriceActive &&
+              _availableSpecialQuota > 0,
         );
         if (chosenQty == null) return;
         finalQty = chosenQty;
@@ -347,6 +344,8 @@ class _PosPageState extends State<PosPage> {
       builder: (ctx) => ScanQrDialog(
         warehouseId: _selectedWarehouseId,
         branchId: _selectedBranchId,
+        isSpecialPriceActive:
+            _isSpecialPriceActive && _availableSpecialQuota > 0,
         onProductFound: (product, qrcode, qty) async {
           final canProceed = await KardusConflictHelper.checkAndResolve(
             context: context,
@@ -1093,7 +1092,7 @@ class _PosPageState extends State<PosPage> {
     );
   }
 
-  Future<void> _handleCheckout() async {
+  Future<void> _handleCheckout({bool confirmPriceMismatch = false}) async {
     // 1. Validasi keranjang belanja
     if (_cartItems.isEmpty) {
       _showNotification(
@@ -1146,14 +1145,16 @@ class _PosPageState extends State<PosPage> {
     final paymentMethodName = selectedMethod?.name ?? 'Pembayaran Non-Tunai';
 
     // 2. Tampilkan dialog validasi / konfirmasi sebelum menyelesaikan transaksi
-    final isConfirmed = await _showPaymentConfirmationDialog(
-      grandTotal: grandTotal,
-      subTotal: subTotal,
-      discount: discount,
-      ppn: ppn,
-      totalQty: totalQty,
-      paymentMethodName: paymentMethodName,
-    );
+    final isConfirmed = confirmPriceMismatch
+        ? true
+        : await _showPaymentConfirmationDialog(
+            grandTotal: grandTotal,
+            subTotal: subTotal,
+            discount: discount,
+            ppn: ppn,
+            totalQty: totalQty,
+            paymentMethodName: paymentMethodName,
+          );
 
     if (!isConfirmed || !mounted) return;
 
@@ -1174,6 +1175,7 @@ class _PosPageState extends State<PosPage> {
       'cash': grandTotal,
       'change': 0.0,
       if (_selectedPromo != null) 'promo_id': _selectedPromo!.id,
+      if (confirmPriceMismatch) 'confirm_price_mismatch': true,
       'items': itemsPayload,
       'details': itemsPayload,
     };
@@ -1297,6 +1299,12 @@ class _PosPageState extends State<PosPage> {
         await _loadInitialMasterData(showLoading: false);
       }
     } else {
+      // Tangani perbedaan harga kasir vs ketentuan server (status price_mismatch / HTTP 409)
+      if (res.status == 'price_mismatch' || res.statusCode == 409) {
+        await _handlePriceMismatchDialog(res);
+        return;
+      }
+
       final isConnectionIssue = res.statusCode == 503 ||
           res.statusCode == 408 ||
           res.statusCode == 502 ||
@@ -1417,6 +1425,207 @@ class _PosPageState extends State<PosPage> {
             : 'Gagal memproses transaksi kasir.',
         backgroundColor: AppColors.error,
       );
+    }
+  }
+
+  Future<void> _handlePriceMismatchDialog(ApiResponse<InvoiceModel> res) async {
+    final rawList = res.errors is List
+        ? res.errors as List
+        : (res.data is Map && (res.data as Map)['price_mismatches'] is List
+            ? (res.data as Map)['price_mismatches'] as List
+            : []);
+
+    final mismatches = rawList
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
+
+    if (mismatches.isEmpty) {
+      _showNotification(
+        res.message.isNotEmpty
+            ? res.message
+            : 'Terjadi perbedaan harga dengan server.',
+        backgroundColor: AppColors.error,
+      );
+      return;
+    }
+
+    final shouldOverride = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.radiusLg),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.amber.shade300),
+              ),
+              child: const Icon(
+                Icons.price_change_outlined,
+                color: Colors.amber,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Penyesuaian Harga Server',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Sistem mendeteksi perbedaan antara harga di keranjang kasir dengan ketentuan promo server terkini:',
+                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: mismatches.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (context, idx) {
+                    final m = mismatches[idx];
+                    final name = m['item_name']?.toString() ?? 'Produk';
+                    final clientP =
+                        double.tryParse(m['client_price']?.toString() ?? '0') ??
+                            0.0;
+                    final serverP =
+                        double.tryParse(m['server_price']?.toString() ?? '0') ??
+                            0.0;
+                    final isSpecial = m['is_special'] == true;
+                    final reason = m['reason']?.toString() ?? '';
+
+                    return Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Row(
+                            children: [
+                              Text(
+                                'Kasir: ${CurrencyFormatter.format(clientP)}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.red,
+                                  decoration: TextDecoration.lineThrough,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 14,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Server: ${CurrencyFormatter.format(serverP)}',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: isSpecial
+                                      ? Colors.green.shade800
+                                      : AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (reason.isNotEmpty) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              reason,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontStyle: FontStyle.italic,
+                                color: isSpecial
+                                    ? Colors.green.shade700
+                                    : AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Apakah Anda ingin memperbarui harga transaksi ini sesuai ketentuan server?',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
+            icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+            label: const Text('Perbarui & Lanjutkan'),
+            onPressed: () => Navigator.of(ctx).pop(true),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldOverride == true && mounted) {
+      // Perbarui harga di keranjang kasir sesuai harga server
+      setState(() {
+        for (final m in mismatches) {
+          final itemId = int.tryParse(m['item_id']?.toString() ?? '0') ?? 0;
+          final serverP =
+              double.tryParse(m['server_price']?.toString() ?? '0') ?? 0.0;
+
+          for (final item in _cartItems) {
+            if (item.product.itemId == itemId) {
+              item.price = serverP;
+              // Catatan: isSpecialPrice di CartItemModel adalah final,
+              // namun item.price sudah langsung mencerminkan harga baru.
+            }
+          }
+        }
+      });
+      _onCartChanged();
+
+      _showNotification(
+        'Harga keranjang telah disesuaikan dengan server. Menyelesaikan transaksi...',
+      );
+
+      // Submit kembali transaksi dengan konfirmasi override server
+      await _handleCheckout(confirmPriceMismatch: true);
     }
   }
 

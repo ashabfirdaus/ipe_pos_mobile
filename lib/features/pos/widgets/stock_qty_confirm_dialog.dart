@@ -11,12 +11,14 @@ class StockQtyConfirmDialog extends StatefulWidget {
   final ProductModel product;
   final String qrcode;
   final int maxQty;
+  final bool isSpecialPrice;
 
   const StockQtyConfirmDialog({
     super.key,
     required this.product,
     required this.qrcode,
     required this.maxQty,
+    this.isSpecialPrice = false,
   });
 
   /// Menampilkan popup konfirmasi qty stok QR
@@ -24,6 +26,7 @@ class StockQtyConfirmDialog extends StatefulWidget {
     BuildContext context, {
     required ProductModel product,
     required String qrcode,
+    bool isSpecialPrice = false,
   }) {
     final maxQty = product.qrStock > 0
         ? product.qrStock.toInt()
@@ -35,6 +38,7 @@ class StockQtyConfirmDialog extends StatefulWidget {
         product: product,
         qrcode: qrcode,
         maxQty: maxQty,
+        isSpecialPrice: isSpecialPrice,
       ),
     );
   }
@@ -113,7 +117,9 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
   @override
   Widget build(BuildContext context) {
     final unit = widget.product.unit?.isNotEmpty == true ? widget.product.unit! : 'Pcs';
-    final subtotal = widget.product.price * _currentQty;
+    final bool useSpecial = widget.isSpecialPrice && widget.product.hasSpecialPrice;
+    final double effectivePrice = useSpecial ? widget.product.specialPrice! : widget.product.price;
+    final subtotal = effectivePrice * _currentQty;
     final isAtMax = _currentQty >= widget.maxQty;
     final isAtMin = _currentQty <= 1;
 
@@ -247,14 +253,38 @@ class _StockQtyConfirmDialogState extends State<StockQtyConfirmDialog> {
                         ),
                       ),
                       const Spacer(),
-                      Text(
-                        '${CurrencyFormatter.format(widget.product.price)} / $unit',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary,
+                      if (useSpecial) ...[
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              CurrencyFormatter.format(widget.product.price),
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                color: Colors.grey,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                            Text(
+                              '${CurrencyFormatter.format(widget.product.specialPrice!)} / $unit',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade800,
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
+                      ] else ...[
+                        Text(
+                          '${CurrencyFormatter.format(widget.product.price)} / $unit',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 6),

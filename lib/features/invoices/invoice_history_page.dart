@@ -16,37 +16,60 @@ class InvoiceHistoryPage extends StatefulWidget {
 
 class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  bool _hasMore = true;
   String? _errorMessage;
+  String? _loadMoreError;
   List<InvoiceModel> _invoices = [];
+  int _totalInvoices = 0;
 
   int? _selectedStatus; // null = all, 1 = active, 0 = void
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
   int _currentPage = 1;
 
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
     _loadInvoices();
   }
 
   @override
   void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    // Load page berikutnya ketika scroll mendekati bagian bawah list (threshold 200px)
+    if (currentScroll >= (maxScroll - 200)) {
+      if (!_isLoading && !_isLoadingMore && _hasMore) {
+        _loadMoreInvoices();
+      }
+    }
   }
 
   Future<void> _loadInvoices({bool refresh = false}) async {
     if (refresh) {
       _currentPage = 1;
+      _hasMore = true;
+      _loadMoreError = null;
     }
 
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _loadMoreError = null;
     });
 
     final res = await ApiService.getInvoices(
-      page: _currentPage,
+      page: 1,
       status: _selectedStatus,
       search: _searchController.text.trim(),
     );
@@ -58,12 +81,52 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
     });
 
     if (res.isSuccess && res.data != null) {
+      final paginated = res.data!;
       setState(() {
-        _invoices = res.data!;
+        _invoices = List.from(paginated.items);
+        _currentPage = paginated.currentPage;
+        _hasMore = paginated.hasMore;
+        _totalInvoices = paginated.total;
       });
     } else {
       setState(() {
         _errorMessage = res.message;
+      });
+    }
+  }
+
+  Future<void> _loadMoreInvoices() async {
+    if (_isLoading || _isLoadingMore || !_hasMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+      _loadMoreError = null;
+    });
+
+    final nextPage = _currentPage + 1;
+    final res = await ApiService.getInvoices(
+      page: nextPage,
+      status: _selectedStatus,
+      search: _searchController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingMore = false;
+    });
+
+    if (res.isSuccess && res.data != null) {
+      final paginated = res.data!;
+      setState(() {
+        _currentPage = paginated.currentPage;
+        _invoices.addAll(paginated.items);
+        _hasMore = paginated.hasMore;
+        _totalInvoices = paginated.total;
+      });
+    } else {
+      setState(() {
+        _loadMoreError = res.message;
       });
     }
   }
@@ -108,6 +171,7 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
       padding: const EdgeInsets.all(AppSizes.md),
       color: Colors.white,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Search Field
           TextField(
@@ -124,16 +188,18 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                       },
                     )
                   : null,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             ),
             onSubmitted: (_) => _loadInvoices(refresh: true),
           ),
           AppSizes.gapH8,
 
-          // Status Filter Chips
+          // Status Filter Chips & Result Counter
           Row(
             children: [
-              const Text('Status:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              const Text('Status:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               AppSizes.gapW8,
               ChoiceChip(
                 label: const Text('Semua', style: TextStyle(fontSize: 11)),
@@ -169,6 +235,24 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                   }
                 },
               ),
+              const Spacer(),
+              if (!_isLoading && _totalInvoices > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_invoices.length}/$_totalInvoices data',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
             ],
           ),
         ],
@@ -177,23 +261,35 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
   }
 
   Widget _buildInvoiceList() {
+    final showFooter = _hasMore || _isLoadingMore || _loadMoreError != null;
+
     return RefreshIndicator(
       onRefresh: () => _loadInvoices(refresh: true),
       child: ListView.separated(
+        controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(AppSizes.md),
-        itemCount: _invoices.length,
+        itemCount: _invoices.length + (showFooter ? 1 : 0),
         separatorBuilder: (context, index) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
+          if (index == _invoices.length) {
+            return _buildLoadMoreFooter();
+          }
+
           final inv = _invoices[index];
           final isVoid = inv.status == 0;
 
           return Card(
             elevation: 1.5,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppSizes.radiusMd)),
             child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               leading: CircleAvatar(
-                backgroundColor: isVoid ? AppColors.errorContainer : AppColors.primaryContainer,
+                backgroundColor: isVoid
+                    ? AppColors.errorContainer
+                    : AppColors.primaryContainer,
                 child: Icon(
                   isVoid ? Icons.cancel_outlined : Icons.receipt_long_rounded,
                   color: isVoid ? AppColors.error : AppColors.primary,
@@ -205,14 +301,18 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                   Expanded(
                     child: Text(
                       inv.invoiceNo,
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isVoid ? AppColors.errorContainer : AppColors.successContainer,
+                      color: isVoid
+                          ? AppColors.errorContainer
+                          : AppColors.successContainer,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -232,16 +332,20 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                   AppSizes.gapH4,
                   Row(
                     children: [
-                      const Icon(Icons.access_time, size: 13, color: AppColors.textSecondary),
+                      const Icon(Icons.access_time,
+                          size: 13, color: AppColors.textSecondary),
                       const SizedBox(width: 4),
-                      Text(CurrencyFormatter.formatDate(inv.createdAt), style: AppTextStyles.caption),
+                      Text(CurrencyFormatter.formatDate(inv.createdAt),
+                          style: AppTextStyles.caption),
                     ],
                   ),
-                  if (inv.cashierName != null && inv.cashierName!.trim().isNotEmpty) ...[
+                  if (inv.cashierName != null &&
+                      inv.cashierName!.trim().isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.person_outline_rounded, size: 13, color: AppColors.textSecondary),
+                        const Icon(Icons.person_outline_rounded,
+                            size: 13, color: AppColors.textSecondary),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -256,11 +360,14 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                       ],
                     ),
                   ],
-                  if (isVoid && inv.voidByName != null && inv.voidByName!.trim().isNotEmpty) ...[
+                  if (isVoid &&
+                      inv.voidByName != null &&
+                      inv.voidByName!.trim().isNotEmpty) ...[
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        const Icon(Icons.cancel_outlined, size: 13, color: AppColors.error),
+                        const Icon(Icons.cancel_outlined,
+                            size: 13, color: AppColors.error),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -281,14 +388,17 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                     children: [
                       Text(
                         inv.paymentMethodName ?? 'Tunai',
-                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary),
                       ),
                       Text(
                         CurrencyFormatter.format(inv.grandTotal),
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: isVoid ? AppColors.textSecondary : AppColors.primary,
+                          color: isVoid
+                              ? AppColors.textSecondary
+                              : AppColors.primary,
                           decoration: isVoid ? TextDecoration.lineThrough : null,
                         ),
                       ),
@@ -302,13 +412,60 @@ class _InvoiceHistoryPageState extends State<InvoiceHistoryPage> {
                     builder: (ctx) => InvoiceDetailPage(invoiceId: inv.id),
                   ),
                 );
-                _loadInvoices();
+                _loadInvoices(refresh: true);
               },
             ),
           );
         },
       ),
     );
+  }
+
+  Widget _buildLoadMoreFooter() {
+    if (_isLoadingMore) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        alignment: Alignment.center,
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 10),
+            Text(
+              'Memuat transaksi berikutnya...',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_loadMoreError != null) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        child: Column(
+          children: [
+            Text(
+              'Gagal memuat halaman berikutnya: $_loadMoreError',
+              style: const TextStyle(fontSize: 12, color: AppColors.error),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            TextButton.icon(
+              onPressed: _loadMoreInvoices,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Coba Lagi', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
   }
 
   Widget _buildEmptyState() {

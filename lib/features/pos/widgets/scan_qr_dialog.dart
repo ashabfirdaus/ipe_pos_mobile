@@ -11,12 +11,14 @@ import 'stock_qty_confirm_dialog.dart';
 class ScanQrDialog extends StatefulWidget {
   final int? warehouseId;
   final int? branchId;
+  final bool isSpecialPriceActive;
   final Function(ProductModel product, String qrcode, int qty) onProductFound;
 
   const ScanQrDialog({
     super.key,
     this.warehouseId,
     this.branchId,
+    this.isSpecialPriceActive = false,
     required this.onProductFound,
   });
 
@@ -135,6 +137,7 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
         context,
         product: product,
         qrcode: code,
+        isSpecialPrice: widget.isSpecialPriceActive && product.hasSpecialPrice,
       );
       if (chosenQty == null) return;
       finalQty = chosenQty;
@@ -433,14 +436,34 @@ class _ScanQrDialogState extends State<ScanQrDialog> {
                                       const SizedBox(height: 4),
                                       Row(
                                         children: [
-                                          Text(
-                                            CurrencyFormatter.format(product.price),
-                                            style: const TextStyle(
-                                              color: AppColors.primary,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12.5,
+                                          if (widget.isSpecialPriceActive && product.hasSpecialPrice) ...[
+                                            Text(
+                                              CurrencyFormatter.format(product.specialPrice!),
+                                              style: TextStyle(
+                                                color: Colors.green.shade800,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12.5,
+                                              ),
                                             ),
-                                          ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              CurrencyFormatter.format(product.price),
+                                              style: const TextStyle(
+                                                color: Colors.grey,
+                                                decoration: TextDecoration.lineThrough,
+                                                fontSize: 10.5,
+                                              ),
+                                            ),
+                                          ] else ...[
+                                            Text(
+                                              CurrencyFormatter.format(product.price),
+                                              style: const TextStyle(
+                                                color: AppColors.primary,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12.5,
+                                              ),
+                                            ),
+                                          ],
                                           const SizedBox(width: 6),
                                           Text(
                                             '•  Stok: ${product.stock.toInt()} ${product.unit ?? "pcs"}',

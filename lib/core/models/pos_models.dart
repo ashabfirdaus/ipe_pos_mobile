@@ -702,6 +702,24 @@ class InvoiceItemModel {
   }
 }
 
+class PaginatedList<T> {
+  final List<T> items;
+  final int currentPage;
+  final int lastPage;
+  final int total;
+  final int perPage;
+  final bool hasMore;
+
+  PaginatedList({
+    required this.items,
+    this.currentPage = 1,
+    this.lastPage = 1,
+    this.total = 0,
+    this.perPage = 20,
+    required this.hasMore,
+  });
+}
+
 class InvoiceModel {
   final dynamic id;
   final String invoiceNo;

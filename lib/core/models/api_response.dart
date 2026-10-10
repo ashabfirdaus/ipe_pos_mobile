@@ -34,6 +34,7 @@ class ApiResponse<T> {
     required String message,
     String status = 'error',
     dynamic errors,
+    T? data,
     int statusCode = 400,
   }) {
     return ApiResponse<T>(
@@ -41,6 +42,7 @@ class ApiResponse<T> {
       status: status,
       message: message,
       errors: errors,
+      data: data,
       statusCode: statusCode,
     );
   }

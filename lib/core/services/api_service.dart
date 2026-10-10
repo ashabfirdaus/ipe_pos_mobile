@@ -243,7 +243,8 @@ class ApiService {
         return ApiResponse.error(
           message: message,
           status: status,
-          errors: errors,
+          errors: errors ?? json['price_mismatches'],
+          data: data,
           statusCode: response.statusCode,
         );
       }
@@ -704,11 +705,15 @@ class ApiService {
       return ApiResponse.success(data: invoice, message: res.message);
     }
     return ApiResponse.error(
-        message: res.message, errors: res.errors, statusCode: res.statusCode);
+      message: res.message,
+      status: res.status,
+      errors: res.errors,
+      statusCode: res.statusCode,
+    );
   }
 
   /// Get Invoices History with filters and pagination
-  static Future<ApiResponse<List<InvoiceModel>>> getInvoices({
+  static Future<ApiResponse<PaginatedList<InvoiceModel>>> getInvoices({
     int page = 1,
     int perPage = 15,
     int? branchId,
@@ -728,24 +733,59 @@ class ApiService {
     if (status != null) query['status'] = status;
     if (search != null && search.isNotEmpty) query['search'] = search;
     if (date != null && date.isNotEmpty) query['date'] = date;
-    if (startDate != null && startDate.isNotEmpty)
+    if (startDate != null && startDate.isNotEmpty) {
       query['start_date'] = startDate;
+    }
     if (endDate != null && endDate.isNotEmpty) query['end_date'] = endDate;
 
     final res = await get(ApiConfig.posInvoices, queryParams: query);
     if (res.isSuccess) {
       final list = <InvoiceModel>[];
-      final items = res.data is List
-          ? res.data
-          : (res.data is Map ? res.data['invoices'] ?? res.data['data'] : []);
-      if (items is List) {
-        for (final item in items) {
+      int curPage = page;
+      int lastPage = page;
+      int total = 0;
+      int pPage = perPage;
+      bool hasMore = false;
+
+      if (res.data is Map) {
+        final map = res.data as Map;
+        curPage =
+            int.tryParse(map['current_page']?.toString() ?? '$page') ?? page;
+        lastPage =
+            int.tryParse(map['last_page']?.toString() ?? '$curPage') ?? curPage;
+        total = int.tryParse(map['total']?.toString() ?? '0') ?? 0;
+        pPage =
+            int.tryParse(map['per_page']?.toString() ?? '$perPage') ?? perPage;
+
+        final rawItems = map['data'] ?? map['invoices'];
+        if (rawItems is List) {
+          for (final item in rawItems) {
+            if (item is Map<String, dynamic>) {
+              list.add(InvoiceModel.fromJson(item));
+            }
+          }
+        }
+        hasMore = curPage < lastPage;
+      } else if (res.data is List) {
+        for (final item in res.data) {
           if (item is Map<String, dynamic>) {
             list.add(InvoiceModel.fromJson(item));
           }
         }
+        hasMore = list.length >= perPage;
+        total = list.length;
       }
-      return ApiResponse.success(data: list, message: res.message);
+
+      final paginated = PaginatedList<InvoiceModel>(
+        items: list,
+        currentPage: curPage,
+        lastPage: lastPage,
+        total: total,
+        perPage: pPage,
+        hasMore: hasMore,
+      );
+
+      return ApiResponse.success(data: paginated, message: res.message);
     }
     return ApiResponse.error(message: res.message, statusCode: res.statusCode);
   }
